@@ -2,24 +2,22 @@
 FROM nginx:alpine
 
 # Copiar archivos estáticos
-COPY . /usr/share/nginx/html/
+COPY index.html /usr/share/nginx/html/
+COPY style.css /usr/share/nginx/html/
+COPY app.js /usr/share/nginx/html/
+COPY assets /usr/share/nginx/html/assets/
 
-# Configurar nginx para SPA
-RUN echo 'server { \
-    listen 80; \
-    server_name _; \
-    root /usr/share/nginx/html; \
-    index index.html; \
-    location / { \
-        try_files $uri $uri/ /index.html; \
-    } \
-    location ~* \.(jpg|jpeg|png|gif|ico|css|js|mp4|webm)$ { \
-        expires 1y; \
-        add_header Cache-Control "public, immutable"; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
+# Copiar configuración de nginx
+COPY .nginx.conf /etc/nginx/conf.d/default.conf
+
+# Crear script de inicio para generar config.js dinámicamente
+RUN echo '#!/bin/sh \
+set -e \
+echo "window.OPENROUTER_API_KEY = \"${OPENROUTER_API_KEY:-}\";" > /usr/share/nginx/html/config.js \
+echo "config.js generado con API key" \
+exec nginx -g "daemon off;"' > /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 
 EXPOSE 80
 
-CMD ["nginx", "-g", "daemon off;"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
 

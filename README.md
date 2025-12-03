@@ -1,79 +1,102 @@
 # MIR AAL • Avatar IA
 
-Avatar inteligente con análisis facial y detección de emociones en tiempo real.
+Avatar inteligente con análisis facial, detección de emociones y reconocimiento de objetos en tiempo real.
 
 ## Características
 
-- 🎭 **Avatar animado** con transición entre imagen fija y video
-- 🎤 **Reconocimiento de voz** para interacción por voz
-- 🔊 **Síntesis de voz** (TTS) en español
-- 📹 **Análisis facial** en tiempo real
-- 😊 **Detección de emociones** (feliz, triste, etc.)
-- 💬 **Chat inteligente** con IA (OpenRouter)
-- 🎥 **Dos videos** que se alternan según longitud del texto y tema
+- 🎭 Avatar animado que habla sincronizado con síntesis de voz
+- 📹 Análisis facial en tiempo real con detección de emociones
+- 👕 Detección de ropa y objetos en el entorno
+- 🎤 Reconocimiento de voz para interacción natural
+- 💬 Chat con IA usando OpenRouter (Llama 3)
+- 🌙 Interfaz oscura profesional
+
+## Tecnologías
+
+- HTML5, CSS3, JavaScript (Vanilla)
+- Web Speech API (Reconocimiento y síntesis de voz)
+- MediaDevices API (Cámara web)
+- Canvas API (Análisis de imagen)
+- OpenRouter API (IA conversacional)
+
+## Instalación Local
+
+```bash
+# Clonar el repositorio
+git clone https://github.com/Xangel0s/avatar.git
+cd avatar
+
+# Instalar dependencias (opcional, solo para desarrollo)
+npm install
+
+# Iniciar servidor local
+npm start
+```
+
+Abre `http://localhost:3000` en tu navegador.
+
+## Despliegue en Producción
+
+### Con Docker
+
+```bash
+# Construir imagen
+docker build -t avatar-ia .
+
+# Ejecutar contenedor
+docker run -p 80:80 -e OPENROUTER_API_KEY=tu_api_key avatar-ia
+```
+
+### Con Coolify
+
+1. Conecta tu repositorio de GitHub a Coolify
+2. Selecciona "Dockerfile" como Build Pack
+3. Agrega la variable de entorno:
+   - **Nombre**: `OPENROUTER_API_KEY`
+   - **Valor**: Tu API key de OpenRouter
+4. Deploy!
+
+## Variables de Entorno
+
+- `OPENROUTER_API_KEY`: API key de OpenRouter (requerida)
 
 ## Estructura del Proyecto
 
 ```
-/avatar
-  ├── index.html          # Interfaz principal
-  ├── style.css           # Estilos (tema oscuro profesional)
-  ├── app.js              # Lógica de la aplicación
-  ├── assets/
-  │   ├── hombre1.jpg     # Imagen fija del avatar
-  │   ├── hombrevideo1.mp4 # Video 1 (textos cortos)
-  │   └── hombrevideo2.mp4 # Video 2 (textos largos/emociones)
-  └── README.md
+avatar/
+├── index.html          # Estructura HTML
+├── style.css           # Estilos
+├── app.js              # Lógica principal
+├── server.js           # Servidor Node.js (desarrollo)
+├── Dockerfile          # Configuración Docker
+├── .nginx.conf         # Configuración Nginx
+├── package.json        # Dependencias Node.js
+└── assets/            # Recursos multimedia
+    ├── hombre1.jpg
+    ├── hombrevideo1.mp4
+    └── hombrevideo2.mp4
 ```
 
-## Configuración
+## Uso
 
-### Desarrollo Local
+1. Activa tu cámara web para análisis facial
+2. Escribe o habla con el avatar usando el micrófono
+3. El avatar analizará tu entorno, ropa y emociones
+4. MIR responderá en español con animación sincronizada
 
-1. Abre `index.html` en tu navegador
-2. Permite el acceso a la cámara cuando se solicite
-3. El avatar comenzará a analizar tu entorno automáticamente
+## Requisitos
 
-### Producción
-
-#### Opción 1: Servidor Node.js
-```bash
-npm install
-npm start
-```
-
-#### Opción 2: Docker
-```bash
-docker build -t mir-avatar .
-docker run -p 3000:80 mir-avatar
-```
-
-#### Opción 3: Coolify
-1. Conecta tu repositorio de GitHub
-2. Selecciona "Static Site" como tipo de aplicación
-3. Puerto: 3000 (o usa el servidor incluido)
-4. La aplicación se desplegará automáticamente
-
-#### Variables de Entorno (Opcional)
-Para mayor seguridad, puedes configurar la API key como variable de entorno:
-- `OPENROUTER_API_KEY`: Tu API key de OpenRouter
-
-## Tecnologías
-
-- HTML5 / CSS3 / JavaScript Vanilla
-- Web Speech API (TTS y reconocimiento de voz)
-- OpenRouter API (IA conversacional)
-- MediaDevices API (cámara web)
-- Canvas API (análisis de imagen)
-
-## Notas
-
-- Requiere navegador moderno (Chrome/Edge recomendado)
-- La cámara se activa automáticamente al cargar
-- El avatar responde siempre en español
-- Los videos están silenciados, solo se usa TTS del texto generado
+- Navegador moderno con soporte para:
+  - Web Speech API
+  - MediaDevices API
+  - Canvas API
+- Cámara web (opcional, para análisis facial)
+- Micrófono (opcional, para reconocimiento de voz)
 
 ## Licencia
 
 MIT
 
+## Autor
+
+Xangel0s

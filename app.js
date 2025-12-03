@@ -1,7 +1,7 @@
 // Configuración
 const CONFIG = {
-  // API Key de OpenRouter
-  openRouterKey: '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',
+  // API Key de OpenRouter - desde variable de entorno o fallback
+  openRouterKey: window.OPENROUTER_API_KEY || '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',
   model: 'meta-llama/llama-3-8b-instruct',
   useWebSpeechTTS: true,
   videoGenEndpoint: 'https://api-avatar.edvio.app/generate',
@@ -67,6 +67,7 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
 // Estado de voz - Síntesis (hablar)
 let synth = window.speechSynthesis;
 let isSpeaking = false;
+let isListening = false; // Estado del reconocimiento de voz
 
 // Inicialización
 document.addEventListener('DOMContentLoaded', async () => {
@@ -104,14 +105,26 @@ function setupEventListeners() {
       const transcript = event.results[0][0].transcript;
       userInput.value = transcript;
       btnMic.classList.remove('listening');
+      isListening = false;
       setTimeout(() => handleSend(), 300);
     };
     recognition.onerror = (event) => {
       console.error('Error de reconocimiento:', event.error);
       btnMic.classList.remove('listening');
+      isListening = false;
+      // Si el error es "no-speech", no hacer nada (es normal)
+      if (event.error !== 'no-speech') {
+        // Para otros errores, intentar detener si está activo
+        try {
+          recognition.stop();
+        } catch (e) {
+          // Ignorar errores al detener
+        }
+      }
     };
     recognition.onend = () => {
       btnMic.classList.remove('listening');
+      isListening = false;
     };
   } else {
     btnMic.style.opacity = '0.5';
@@ -217,7 +230,7 @@ async function analyzeEnvironment() {
     environmentContext = {
       ...basicAnalysis,
       faces: faceData,
-      objects: [],
+      objects: basicAnalysis.objects || {},
       lastUpdate: new Date()
     };
     
@@ -225,7 +238,7 @@ async function analyzeEnvironment() {
     drawDetections(faceData, []);
     
     // Actualizar UI
-    updateEnvironmentUI(basicAnalysis, faceData, []);
+    updateEnvironmentUI(basicAnalysis, faceData, basicAnalysis.objects);
     
     // Enviar contexto al sistema si hay cambios significativos
     if (basicAnalysis.faceDetected && !messages.find(m => m.role === 'system' && m.content.includes('cámara activa'))) {
@@ -337,16 +350,432 @@ function performBasicAnalysis(imageData) {
   const avgBrightness = totalBrightness / pixelCount;
   
   // Detección básica de cara (basada en patrones de color de piel)
-  // Esto es una aproximación simple - en producción usarías una librería como MediaPipe
   const skinTonePixels = countSkinTonePixels(data);
-  faceDetected = skinTonePixels > (pixelCount * 0.1); // Si más del 10% son tonos de piel
+  faceDetected = skinTonePixels > (pixelCount * 0.1);
+  
+  // Análisis de objetos y ropa
+  const objectAnalysis = analyzeObjectsAndClothing(data, imageData.width, imageData.height);
   
   return {
     faceDetected,
     movement,
     brightness: Math.round(avgBrightness),
-    skinToneRatio: (skinTonePixels / pixelCount * 100).toFixed(1)
+    skinToneRatio: (skinTonePixels / pixelCount * 100).toFixed(1),
+    objects: objectAnalysis
   };
+}
+
+// Analizar objetos y ropa en la imagen
+function analyzeObjectsAndClothing(data, width, height) {
+  const objects = {
+    clothing: {
+      detected: false,
+      colors: [],
+      types: [],
+      details: []
+    },
+    background: {
+      detected: false,
+      color: null,
+      type: null
+    },
+    items: [],
+    environment: {
+      lighting: 'normal',
+      objects: []
+    }
+  };
+  
+  // Dividir la imagen en regiones más precisas
+  const headRegion = Math.floor(height * 0.25); // 25% superior (cabeza)
+  const upperBodyRegion = Math.floor(height * 0.45); // 20% siguiente (torso/ropa superior)
+  const lowerBodyRegion = Math.floor(height * 0.75); // 30% siguiente (cintura/ropa inferior)
+  // 25% inferior = fondo
+  
+  let headColors = [];
+  let upperBodyColors = [];
+  let lowerBodyColors = [];
+  let backgroundColors = [];
+  let edgeColors = []; // Colores en los bordes (probablemente fondo)
+  
+  // Analizar diferentes regiones con muestreo más eficiente
+  const sampleRate = 2; // Analizar cada 2 píxeles para mejor rendimiento
+  
+  for (let y = 0; y < height; y += sampleRate) {
+    for (let x = 0; x < width; x += sampleRate) {
+      const idx = (y * width + x) * 4;
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
+      const brightness = (r + g + b) / 3;
+      
+      // Excluir píxeles muy oscuros o muy brillantes (probablemente ruido)
+      if (brightness < 10 || brightness > 245) continue;
+      
+      const color = { r, g, b, brightness };
+      
+      // Región de cabeza (excluir si es tono de piel)
+      if (y < headRegion) {
+        if (!isSkinTone(r, g, b)) {
+          headColors.push(color);
+        }
+      }
+      // Región superior del cuerpo (ropa superior)
+      else if (y >= headRegion && y < upperBodyRegion) {
+        if (!isSkinTone(r, g, b)) {
+          upperBodyColors.push(color);
+        }
+      }
+      // Región inferior del cuerpo (ropa inferior)
+      else if (y >= upperBodyRegion && y < lowerBodyRegion) {
+        if (!isSkinTone(r, g, b)) {
+          lowerBodyColors.push(color);
+        }
+      }
+      // Región inferior (fondo)
+      else {
+        backgroundColors.push(color);
+      }
+      
+      // Detectar bordes (probablemente fondo)
+      if (x < width * 0.1 || x > width * 0.9 || y > height * 0.9) {
+        edgeColors.push(color);
+      }
+    }
+  }
+  
+  // Analizar colores dominantes con validación mejorada
+  const upperDominant = getDominantColorValidated(upperBodyColors, 'ropa superior');
+  const lowerDominant = getDominantColorValidated(lowerBodyColors, 'ropa inferior');
+  const backgroundDominant = getDominantColorValidated(backgroundColors, 'fondo');
+  const edgeDominant = getDominantColorValidated(edgeColors, 'borde');
+  
+  // Detectar ropa superior con validación mejorada
+  if (upperDominant && isValidClothingColor(upperDominant)) {
+    const colorName = getColorName(upperDominant.r, upperDominant.g, upperDominant.b);
+    objects.clothing.detected = true;
+    objects.clothing.colors.push(colorName);
+    objects.clothing.types.push('superior');
+    objects.clothing.details.push({
+      type: 'superior',
+      color: colorName,
+      rgb: { r: upperDominant.r, g: upperDominant.g, b: upperDominant.b }
+    });
+    objects.items.push(`Ropa superior: ${colorName}`);
+  }
+  
+  // Detectar ropa inferior con validación mejorada
+  if (lowerDominant && isValidClothingColor(lowerDominant)) {
+    const colorName = getColorName(lowerDominant.r, lowerDominant.g, lowerDominant.b);
+    objects.clothing.detected = true;
+    if (!objects.clothing.colors.includes(colorName)) {
+      objects.clothing.colors.push(colorName);
+    }
+    objects.clothing.types.push('inferior');
+    objects.clothing.details.push({
+      type: 'inferior',
+      color: colorName,
+      rgb: { r: lowerDominant.r, g: lowerDominant.g, b: lowerDominant.b }
+    });
+    objects.items.push(`Ropa inferior: ${colorName}`);
+  }
+  
+  // Detectar fondo (usar colores de borde si están disponibles)
+  const finalBackground = edgeDominant || backgroundDominant;
+  if (finalBackground) {
+    const bgColorName = getColorName(finalBackground.r, finalBackground.g, finalBackground.b);
+    objects.background.detected = true;
+    objects.background.color = bgColorName;
+    objects.background.type = getBackgroundType(finalBackground);
+    objects.items.push(`Fondo: ${bgColorName} (${objects.background.type})`);
+  }
+  
+  // Analizar entorno y objetos
+  analyzeEnvironment(data, width, height, objects);
+  
+  return objects;
+}
+
+// Obtener color dominante de un array de colores con validación mejorada
+function getDominantColorValidated(colors, regionType) {
+  if (colors.length === 0) return null;
+  
+  // Filtrar colores inválidos (demasiado oscuros, brillantes, o tonos de piel)
+  const validColors = colors.filter(color => {
+    // Excluir tonos de piel
+    if (isSkinTone(color.r, color.g, color.b)) return false;
+    // Excluir colores muy oscuros o muy brillantes (probablemente ruido)
+    if (color.brightness < 20 || color.brightness > 240) return false;
+    return true;
+  });
+  
+  if (validColors.length === 0) return null;
+  
+  // Agrupar colores similares con mejor precisión
+  const colorGroups = {};
+  const tolerance = 24; // Tolerancia para agrupar colores similares
+  
+  validColors.forEach(color => {
+    // Buscar grupo existente similar
+    let foundGroup = false;
+    for (const key in colorGroups) {
+      const [r, g, b] = key.split('-').map(Number);
+      if (Math.abs(color.r - r) < tolerance &&
+          Math.abs(color.g - g) < tolerance &&
+          Math.abs(color.b - b) < tolerance) {
+        colorGroups[key].count++;
+        colorGroups[key].r += color.r;
+        colorGroups[key].g += color.g;
+        colorGroups[key].b += color.b;
+        foundGroup = true;
+        break;
+      }
+    }
+    
+    // Si no se encontró grupo, crear uno nuevo
+    if (!foundGroup) {
+      const key = `${Math.floor(color.r / tolerance) * tolerance}-${Math.floor(color.g / tolerance) * tolerance}-${Math.floor(color.b / tolerance) * tolerance}`;
+      if (!colorGroups[key]) {
+        colorGroups[key] = { count: 0, r: 0, g: 0, b: 0 };
+      }
+      colorGroups[key].count++;
+      colorGroups[key].r += color.r;
+      colorGroups[key].g += color.g;
+      colorGroups[key].b += color.b;
+    }
+  });
+  
+  // Encontrar el grupo más común (debe tener al menos 5% de los píxeles)
+  const minPixels = Math.max(validColors.length * 0.05, 10);
+  let maxCount = 0;
+  let dominant = null;
+  
+  Object.keys(colorGroups).forEach(key => {
+    const group = colorGroups[key];
+    if (group.count >= minPixels && group.count > maxCount) {
+      maxCount = group.count;
+      dominant = {
+        r: Math.round(group.r / group.count),
+        g: Math.round(group.g / group.count),
+        b: Math.round(group.b / group.count),
+        confidence: group.count / validColors.length
+      };
+    }
+  });
+  
+  return dominant;
+}
+
+// Validar si un color es válido para ropa (excluye tonos de piel y colores extremos)
+function isValidClothingColor(color) {
+  if (!color) return false;
+  
+  // Excluir tonos de piel
+  if (isSkinTone(color.r, color.g, color.b)) return false;
+  
+  // Excluir colores muy oscuros o muy brillantes (probablemente ruido o iluminación)
+  const brightness = (color.r + color.g + color.b) / 3;
+  if (brightness < 25 || brightness > 235) return false;
+  
+  // Debe tener suficiente saturación (no ser completamente gris)
+  const max = Math.max(color.r, color.g, color.b);
+  const min = Math.min(color.r, color.g, color.b);
+  const saturation = max === 0 ? 0 : (max - min) / max;
+  
+  // Aceptar colores con algo de saturación o grises medios
+  return saturation > 0.1 || (brightness > 50 && brightness < 200);
+}
+
+// Nombrar color aproximado con mejor precisión
+function getColorName(r, g, b) {
+  const brightness = (r + g + b) / 3;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const saturation = max === 0 ? 0 : (max - min) / max;
+  
+  // Colores muy oscuros
+  if (brightness < 40) {
+    if (saturation < 0.2) return 'negro';
+    // Determinar color oscuro
+    if (r > g && r > b) return 'rojo muy oscuro';
+    if (g > r && g > b) return 'verde muy oscuro';
+    if (b > r && b > g) return 'azul muy oscuro';
+    return 'negro';
+  }
+  
+  // Colores muy claros
+  if (brightness > 220) {
+    if (saturation < 0.2) return 'blanco';
+    // Determinar color claro
+    if (r > g && r > b) return 'rosa claro';
+    if (g > r && g > b) return 'verde muy claro';
+    if (b > r && b > g) return 'azul muy claro';
+    return 'blanco';
+  }
+  
+  // Grises
+  if (saturation < 0.15) {
+    if (brightness < 80) return 'gris muy oscuro';
+    if (brightness < 120) return 'gris oscuro';
+    if (brightness < 180) return 'gris';
+    return 'gris claro';
+  }
+  
+  // Colores saturados
+  const deltaR = r - (g + b) / 2;
+  const deltaG = g - (r + b) / 2;
+  const deltaB = b - (r + g) / 2;
+  
+  // Rojos
+  if (r > g && r > b) {
+    if (r > 200 && brightness > 180) return 'rojo claro';
+    if (r > 180) return 'rojo';
+    if (r > 140) return 'rojo oscuro';
+    return 'rojo muy oscuro';
+  }
+  
+  // Verdes
+  if (g > r && g > b) {
+    if (g > 200 && brightness > 180) return 'verde claro';
+    if (g > 180) return 'verde';
+    if (g > 140) return 'verde oscuro';
+    return 'verde muy oscuro';
+  }
+  
+  // Azules
+  if (b > r && b > g) {
+    if (b > 200 && brightness > 180) return 'azul claro';
+    if (b > 180) return 'azul';
+    if (b > 140) return 'azul oscuro';
+    return 'azul muy oscuro';
+  }
+  
+  // Colores secundarios
+  if (r > 150 && g > 100 && g < r) {
+    if (brightness > 180) return 'naranja claro';
+    return 'naranja';
+  }
+  
+  if (r > 120 && b > 120 && Math.abs(r - b) < 30) {
+    if (brightness > 180) return 'morado claro';
+    return 'morado';
+  }
+  
+  if (g > 120 && b > 120 && Math.abs(g - b) < 30) {
+    if (brightness > 180) return 'cian claro';
+    return 'cian';
+  }
+  
+  if (r > 180 && g > 100 && b < 100) {
+    return 'amarillo';
+  }
+  
+  // Color mixto
+  return 'multicolor';
+}
+
+// Obtener tipo de fondo
+function getBackgroundType(color) {
+  const brightness = (color.r + color.g + color.b) / 3;
+  if (brightness < 60) return 'oscuro';
+  if (brightness > 200) return 'claro';
+  return 'medio';
+}
+
+// Verificar si es tono de piel
+function isSkinTone(r, g, b) {
+  return (r > 95 && g > 40 && b > 20 && 
+          r > g && g > b && 
+          Math.max(r, g, b) - Math.min(r, g, b) > 15);
+}
+
+// Analizar entorno completo (objetos, iluminación, etc.)
+function analyzeEnvironment(data, width, height, objects) {
+  // Analizar iluminación general
+  let totalBrightness = 0;
+  let pixelCount = 0;
+  let brightPixels = 0;
+  let darkPixels = 0;
+  
+  // Analizar contraste y objetos
+  const contrastThreshold = 40;
+  let highContrastAreas = 0;
+  let edgeContrast = 0;
+  const sampleRate = 3;
+  
+  // Analizar diferentes zonas
+  for (let y = 0; y < height; y += sampleRate) {
+    for (let x = 0; x < width; x += sampleRate) {
+      const idx = (y * width + x) * 4;
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
+      const brightness = (r + g + b) / 3;
+      
+      totalBrightness += brightness;
+      pixelCount++;
+      
+      if (brightness > 200) brightPixels++;
+      if (brightness < 50) darkPixels++;
+      
+      // Analizar contraste con píxeles adyacentes
+      if (x < width - sampleRate && y < height - sampleRate) {
+        const rightIdx = (y * width + (x + sampleRate)) * 4;
+        const rightR = data[rightIdx];
+        const rightG = data[rightIdx + 1];
+        const rightB = data[rightIdx + 2];
+        
+        const contrast = Math.abs(r - rightR) + Math.abs(g - rightG) + Math.abs(b - rightB);
+        
+        if (contrast > contrastThreshold) {
+          highContrastAreas++;
+        }
+        
+        // Contraste en bordes (indica objetos)
+        if (x < width * 0.15 || x > width * 0.85) {
+          edgeContrast += contrast;
+        }
+      }
+    }
+  }
+  
+  const avgBrightness = totalBrightness / pixelCount;
+  const brightRatio = brightPixels / pixelCount;
+  const darkRatio = darkPixels / pixelCount;
+  
+  // Determinar tipo de iluminación
+  if (avgBrightness > 180) {
+    objects.environment.lighting = 'muy claro';
+  } else if (avgBrightness > 140) {
+    objects.environment.lighting = 'claro';
+  } else if (avgBrightness < 80) {
+    objects.environment.lighting = 'oscuro';
+  } else if (avgBrightness < 110) {
+    objects.environment.lighting = 'poco iluminado';
+  }
+  
+  // Detectar objetos por contraste
+  const contrastRatio = highContrastAreas / (pixelCount / (sampleRate * sampleRate));
+  if (contrastRatio > 0.15) {
+    objects.environment.objects.push('Objetos con contraste detectados');
+  }
+  
+  // Detectar posibles objetos en el entorno
+  if (edgeContrast > 5000) {
+    objects.environment.objects.push('Elementos visibles en el entorno');
+  }
+  
+  // Agregar información de iluminación
+  if (objects.environment.lighting !== 'normal') {
+    objects.items.push(`Iluminación: ${objects.environment.lighting}`);
+  }
+  
+  // Agregar objetos detectados
+  objects.environment.objects.forEach(obj => {
+    if (!objects.items.includes(obj)) {
+      objects.items.push(obj);
+    }
+  });
 }
 
 function countSkinTonePixels(data) {
@@ -378,7 +807,17 @@ function updateEnvironmentUI(analysis, faces, objects) {
     envStatus.style.color = 'var(--text-secondary)';
   }
   
-  // Actualizar información básica
+  // Actualizar información básica con mejor detalle
+  const clothingInfo = analysis.objects?.clothing?.detected 
+    ? analysis.objects.clothing.colors.join(', ')
+    : 'No detectada';
+  
+  const lightingInfo = analysis.objects?.environment?.lighting || 'normal';
+  const lightingEmoji = lightingInfo === 'muy claro' ? '☀️' : 
+                        lightingInfo === 'claro' ? '☀️' : 
+                        lightingInfo === 'oscuro' ? '🌙' : 
+                        lightingInfo === 'poco iluminado' ? '💡' : '✨';
+  
   const infoHTML = `
     <div class="info-item">
       <span class="info-label">Estado:</span>
@@ -386,8 +825,22 @@ function updateEnvironmentUI(analysis, faces, objects) {
     </div>
     <div class="info-item">
       <span class="info-label">Brillo:</span>
-      <span class="info-value">${analysis.brightness > 128 ? 'Bueno' : 'Bajo'}</span>
+      <span class="info-value">${analysis.brightness > 128 ? 'Bueno' : analysis.brightness > 90 ? 'Moderado' : 'Bajo'}</span>
     </div>
+    <div class="info-item">
+      <span class="info-label">Iluminación:</span>
+      <span class="info-value">${lightingEmoji} ${lightingInfo}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Ropa:</span>
+      <span class="info-value">${clothingInfo}</span>
+    </div>
+    ${analysis.objects?.background?.detected ? `
+    <div class="info-item">
+      <span class="info-label">Fondo:</span>
+      <span class="info-value">${analysis.objects.background.color} (${analysis.objects.background.type})</span>
+    </div>
+    ` : ''}
   `;
   environmentInfo.innerHTML = infoHTML;
   
@@ -410,6 +863,41 @@ function updateEnvironmentUI(analysis, faces, objects) {
   } else {
     faceAnalysis.innerHTML = analysis.faceDetected ? 'Persona detectada' : 'Sin caras detectadas';
   }
+  
+  // Mostrar objetos detectados con mejor formato
+  const objectSection = document.getElementById('objectAnalysis');
+  if (objectSection) {
+    if (analysis.objects && analysis.objects.items.length > 0) {
+      // Agrupar información de ropa si está disponible
+      let objectsHTML = '';
+      
+      if (analysis.objects.clothing && analysis.objects.clothing.detected) {
+        analysis.objects.clothing.details.forEach(detail => {
+          objectsHTML += `<span class="analysis-tag high-confidence">👕 ${detail.type}: ${detail.color}</span>`;
+        });
+      }
+      
+      // Agregar otros objetos detectados
+      analysis.objects.items.forEach(item => {
+        // Evitar duplicados de ropa
+        if (!item.includes('Ropa') && !item.includes('Fondo')) {
+          const emoji = item.includes('Iluminación') ? '💡' : 
+                       item.includes('Objetos') ? '📦' : 
+                       item.includes('Elementos') ? '🔍' : '📋';
+          objectsHTML += `<span class="analysis-tag">${emoji} ${item}</span>`;
+        }
+      });
+      
+      // Agregar información de fondo si está disponible
+      if (analysis.objects.background && analysis.objects.background.detected) {
+        objectsHTML += `<span class="analysis-tag">🖼️ Fondo: ${analysis.objects.background.color}</span>`;
+      }
+      
+      objectSection.innerHTML = objectsHTML || '<span class="analysis-tag">Analizando entorno...</span>';
+    } else {
+      objectSection.innerHTML = '<span class="analysis-tag">Sin objetos detectados</span>';
+    }
+  }
 }
 
 function addEnvironmentContextToSystem() {
@@ -421,9 +909,21 @@ function addEnvironmentContextToSystem() {
     ? `Emoción detectada: ${environmentContext.detectedEmotion}.`
     : '';
   
-  const contextMessage = `[CONTEXTO DE CÁMARA] La cámara del usuario está activa. ${facesInfo} ${emotionInfo}
-  El sistema puede analizar el entorno visual en tiempo real con detección facial básica.
-  Si detectas emociones (feliz, triste, preocupado, etc.), pregunta al usuario de forma empática cómo se siente.`;
+  // Información de ropa y objetos
+  let clothingInfo = '';
+  if (environmentContext.objects && environmentContext.objects.clothing && environmentContext.objects.clothing.detected) {
+    const colors = environmentContext.objects.clothing.colors.join(', ');
+    clothingInfo = `Ropa detectada: ${colors}. `;
+  }
+  
+  const objectsInfo = environmentContext.objects && environmentContext.objects.items.length > 0
+    ? `Objetos en el entorno: ${environmentContext.objects.items.join(', ')}. `
+    : '';
+  
+  const contextMessage = `[CONTEXTO DE CÁMARA] La cámara del usuario está activa. ${facesInfo} ${emotionInfo} ${clothingInfo}${objectsInfo}
+  El sistema puede analizar el entorno visual en tiempo real incluyendo ropa, objetos y expresiones faciales.
+  Si detectas emociones (feliz, triste, preocupado, etc.), pregunta al usuario de forma empática cómo se siente.
+  Puedes comentar sobre la ropa que lleva el usuario si es relevante para la conversación.`;
   
   // Agregar contexto al último mensaje del sistema o crear uno nuevo
   const systemMsgIndex = messages.findIndex(m => m.role === 'system');
@@ -583,8 +1083,46 @@ function handleVoiceInput() {
     alert('Tu navegador no soporta reconocimiento de voz.');
     return;
   }
-  btnMic.classList.add('listening');
-  recognition.start();
+  
+  // Si ya está escuchando, detenerlo
+  if (isListening) {
+    try {
+      recognition.stop();
+      isListening = false;
+      btnMic.classList.remove('listening');
+    } catch (e) {
+      console.warn('Error deteniendo reconocimiento:', e);
+    }
+    return;
+  }
+  
+  // Si no está escuchando, iniciarlo
+  try {
+    isListening = true;
+    btnMic.classList.add('listening');
+    recognition.start();
+  } catch (e) {
+    console.error('Error iniciando reconocimiento:', e);
+    isListening = false;
+    btnMic.classList.remove('listening');
+    // Si el error es que ya está iniciado, esperar un momento y reintentar
+    if (e.message && e.message.includes('already started')) {
+      setTimeout(() => {
+        try {
+          recognition.stop();
+          setTimeout(() => {
+            isListening = true;
+            btnMic.classList.add('listening');
+            recognition.start();
+          }, 100);
+        } catch (err) {
+          console.error('Error reiniciando reconocimiento:', err);
+          isListening = false;
+          btnMic.classList.remove('listening');
+        }
+      }, 100);
+    }
+  }
 }
 
 function addMessage(sender, text) {
@@ -705,19 +1243,37 @@ async function playAvatarResponse(text) {
 
 function speakWithWebSpeech(text, hasVideo = false) {
   return new Promise((resolve) => {
+    // Verificar que tenemos texto y síntesis disponible
+    if (!text || text.trim().length === 0) {
+      console.warn('No hay texto para hablar');
+      resolve();
+      return;
+    }
+    
+    if (!synth) {
+      console.error('Síntesis de voz no disponible');
+      resolve();
+      return;
+    }
+    
     // Cancelar cualquier síntesis anterior para evitar repeticiones
     synth.cancel();
     
     // Esperar un momento para que se cancele completamente
     setTimeout(() => {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'es-ES';
-      utterance.rate = 0.9;
-      utterance.pitch = 1;
-      utterance.volume = 1;
-      
-      // Marcar que está hablando ANTES de empezar
-      isSpeaking = true;
+      try {
+        const utterance = new SpeechSynthesisUtterance(text.trim());
+        utterance.lang = 'es-ES';
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+        
+        // Marcar que está hablando ANTES de empezar
+        isSpeaking = true;
+        
+        utterance.onstart = () => {
+          console.log('Iniciando síntesis de voz');
+        };
       
       utterance.onend = () => {
         // Marcar que ya no está hablando
@@ -774,7 +1330,12 @@ function speakWithWebSpeech(text, hasVideo = false) {
         resolve();
       };
       
-      synth.speak(utterance);
+        synth.speak(utterance);
+      } catch (error) {
+        console.error('Error creando utterance:', error);
+        isSpeaking = false;
+        resolve();
+      }
     }, 100);
   });
 }
