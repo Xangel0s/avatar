@@ -28,9 +28,35 @@ Avatar inteligente con análisis facial y detección de emociones en tiempo real
 
 ## Configuración
 
+### Desarrollo Local
+
 1. Abre `index.html` en tu navegador
 2. Permite el acceso a la cámara cuando se solicite
 3. El avatar comenzará a analizar tu entorno automáticamente
+
+### Producción
+
+#### Opción 1: Servidor Node.js
+```bash
+npm install
+npm start
+```
+
+#### Opción 2: Docker
+```bash
+docker build -t mir-avatar .
+docker run -p 3000:80 mir-avatar
+```
+
+#### Opción 3: Coolify
+1. Conecta tu repositorio de GitHub
+2. Selecciona "Static Site" como tipo de aplicación
+3. Puerto: 3000 (o usa el servidor incluido)
+4. La aplicación se desplegará automáticamente
+
+#### Variables de Entorno (Opcional)
+Para mayor seguridad, puedes configurar la API key como variable de entorno:
+- `OPENROUTER_API_KEY`: Tu API key de OpenRouter
 
 ## Tecnologías
 

@@ -14,9 +14,13 @@ desktop.ini
 *.log
 npm-debug.log*
 
-# Variables de entorno (si las agregas después)
+# Variables de entorno
 .env
 .env.local
+.env.production
+
+# Archivos de configuración local
+config.local.js
 
 # Node modules (si agregas dependencias después)
 node_modules/

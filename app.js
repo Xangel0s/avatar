@@ -1,7 +1,8 @@
 // Configuración
 const CONFIG = {
-  openRouterKey: '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',
-  model: 'meta-llama/llama-3-8b-instruct', // Modelo Llama compatible con OpenRouter
+  // API Key desde variable de entorno o usar la del código (solo para desarrollo)
+  openRouterKey: window.OPENROUTER_API_KEY || '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',
+  model: 'meta-llama/llama-3-8b-instruct',
   useWebSpeechTTS: true,
   videoGenEndpoint: 'https://api-avatar.edvio.app/generate',
   cameraAnalysisInterval: 2000,

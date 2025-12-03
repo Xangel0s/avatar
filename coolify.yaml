@@ -1,0 +1,15 @@
+# Configuración para Coolify
+build:
+  type: static
+  base_directory: /
+  build_command: ""
+  install_command: ""
+
+deploy:
+  port: 3000
+  healthcheck_path: /
+  healthcheck_port: 3000
+
+environment:
+  - PORT=3000
+

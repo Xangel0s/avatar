@@ -1,0 +1,23 @@
+{
+  "name": "mir-avatar-ia",
+  "version": "1.0.0",
+  "description": "Avatar IA con análisis facial y detección de emociones",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "avatar",
+    "ia",
+    "ai",
+    "chatbot",
+    "facial-recognition"
+  ],
+  "author": "Xangel0s",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
+
