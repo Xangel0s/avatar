@@ -1,7 +1,7 @@
 // Configuración
 const CONFIG = {
-  // API Key desde variable de entorno o usar la del código (solo para desarrollo)
-  openRouterKey: window.OPENROUTER_API_KEY || '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',
+  // API Key de OpenRouter
+  openRouterKey: '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',
   model: 'meta-llama/llama-3-8b-instruct',
   useWebSpeechTTS: true,
   videoGenEndpoint: 'https://api-avatar.edvio.app/generate',
@@ -463,12 +463,18 @@ async function handleSend() {
   messages.push({ role: 'user', content: userMessage });
 
   try {
+    // Validar que la API key esté presente
+    if (!CONFIG.openRouterKey || CONFIG.openRouterKey === '') {
+      throw new Error('API Key de OpenRouter no configurada. Por favor, configura tu API key.');
+    }
+
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${CONFIG.openRouterKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': window.location.origin
+        'HTTP-Referer': window.location.origin || 'https://github.com/Xangel0s/avatar',
+        'X-Title': 'MIR Avatar IA'
       },
       body: JSON.stringify({
         model: CONFIG.model,
@@ -483,7 +489,16 @@ async function handleSend() {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(`API Error: ${response.status} - ${errorData.error?.message || 'Error desconocido'}`);
+      const errorMessage = errorData.error?.message || `Error ${response.status}`;
+      
+      // Mensajes de error más claros
+      if (response.status === 401) {
+        throw new Error('API Key inválida o expirada. Por favor, verifica tu API key de OpenRouter en https://openrouter.ai/keys');
+      } else if (response.status === 429) {
+        throw new Error('Límite de solicitudes excedido. Por favor, intenta más tarde.');
+      } else {
+        throw new Error(`Error de API: ${errorMessage}`);
+      }
     }
     
     const data = await response.json();
@@ -546,7 +561,20 @@ async function handleSend() {
     await playAvatarResponse(botReply);
   } catch (error) {
     console.error('Error:', error);
-    addMessage('bot', 'Lo siento, ocurrió un error al procesar tu mensaje.');
+    let errorMessage = 'Lo siento, ocurrió un error al procesar tu mensaje.';
+    
+    // Mensajes de error más específicos para el usuario
+    if (error.message.includes('API Key')) {
+      errorMessage = '⚠️ Error de configuración: ' + error.message;
+    } else if (error.message.includes('401')) {
+      errorMessage = '⚠️ API Key inválida. Por favor, verifica tu configuración.';
+    } else if (error.message.includes('429')) {
+      errorMessage = '⏱️ Demasiadas solicitudes. Por favor, espera un momento e intenta de nuevo.';
+    } else {
+      errorMessage = '❌ ' + error.message;
+    }
+    
+    addMessage('bot', errorMessage);
   }
 }
 
