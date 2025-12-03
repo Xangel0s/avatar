@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MIR AAL • Avatar IA</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  
+  <div class="container">
+    
+    <!-- Panel lateral izquierdo - Cámara y análisis -->
+    <div class="side-panel left-panel">
+      <div class="camera-panel">
+        <div class="camera-header">
+          <span>📹</span>
+          <button id="btnToggleCamera" class="btn-toggle" title="Activar/Desactivar cámara">🔴</button>
+        </div>
+        <div class="camera-frame">
+          <video id="userCamera" autoplay playsinline></video>
+          <canvas id="cameraCanvas" style="display: none;"></canvas>
+          <canvas id="overlayCanvas" class="overlay-canvas"></canvas>
+          <div class="camera-placeholder" id="cameraPlaceholder">
+            <span>📷</span>
+          </div>
+        </div>
+        <div class="environment-info" id="environmentInfo">
+          <div class="info-item">
+            <span class="info-label">Estado:</span>
+            <span class="info-value" id="envStatus">Analizando...</span>
+          </div>
+        </div>
+        <div class="analysis-results" id="analysisResults">
+          <div class="results-section">
+            <h4>Análisis Facial</h4>
+            <div id="faceAnalysis" class="analysis-content">Activo</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Centro - Avatar protagonista -->
+    <div class="center-panel">
+      <div class="avatar-container">
+        <div class="avatar-frame">
+          <!-- Imagen fija (por defecto visible) -->
+          <img id="avatarIdle" src="assets/hombre1.jpg" alt="Avatar MIR" class="avatar-media active">
+          <!-- Videos (ocultos por defecto) -->
+          <video id="avatarVideo1" src="assets/hombrevideo1.mp4" class="avatar-media" playsinline muted></video>
+          <video id="avatarVideo2" src="assets/hombrevideo2.mp4" class="avatar-media" playsinline muted></video>
+        </div>
+        <div class="avatar-info">
+          <h2>MIR</h2>
+          <p class="role">Asistente de IA</p>
+          <div class="status-indicator">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">Conectado</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Panel lateral derecho - Chat -->
+    <div class="side-panel right-panel">
+      <div class="chat-panel">
+        <div class="chat-header">
+          <h3>Conversación</h3>
+          <span class="camera-status" id="cameraStatus">📹</span>
+        </div>
+        
+        <div id="chatBox" class="chat-box">
+          <!-- Los mensajes aparecen aquí -->
+        </div>
+        
+        <div class="chat-input-bar">
+          <textarea id="userInput" placeholder="Escribe o pulsa 🎤..." rows="1"></textarea>
+          <button id="btnSend" class="btn-primary">→</button>
+          <button id="btnMic" class="btn-mic">🎤</button>
+        </div>
+      </div>
+    </div>
+    
+  </div>
+  
+  <script src="app.js"></script>
+</body>
+</html>
+
