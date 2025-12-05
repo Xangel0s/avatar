@@ -23,12 +23,26 @@ var limiter = RateLimit({
   }
 });
 
-// CORS configurado para producción - permitir todos los orígenes
+// CORS configurado para producción
 const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['*'];
 app.use(cors({ 
   origin: allowedOrigins.includes('*') ? '*' : allowedOrigins,
-  credentials: true
+  credentials: true,
+  // Asegurar que funcione con HTTPS
+  optionsSuccessStatus: 200
 }));
+
+// Headers de seguridad para HTTPS
+app.use((req, res, next) => {
+  // Si la solicitud viene por HTTPS, asegurar headers de seguridad
+  if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+  }
+  next();
+});
 app.use('/', express.static(__dirname));
 
 // Aplicar rate limiter solo a rutas HTML

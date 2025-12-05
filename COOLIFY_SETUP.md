@@ -73,15 +73,41 @@ OPENROUTER_APP_NAME=Avatar Realtime Agent
 4. La aplicación se iniciará automáticamente
 5. Obtendrás una URL pública (ej: `https://avatar-xxxxx.coolify.app`)
 
-### 6. Verificación
+### 6. Configuración de Dominio y SSL
+
+**IMPORTANTE:** Para que funcione correctamente con HTTPS:
+
+1. **Agregar dominio en Coolify:**
+   - Ve a tu aplicación → Sección **Domains** o **FQDNs**
+   - Agrega tu dominio: `avatar.edvio.app`
+   - Asegúrate de que esté marcado como **HTTPS** (no HTTP)
+   - Coolify/Traefik generará automáticamente el certificado SSL con Let's Encrypt
+
+2. **Configurar DNS:**
+   - El dominio debe apuntar a la IP pública de tu servidor Coolify
+   - Tipo: `A` record
+   - Valor: IP de tu servidor
+
+3. **Actualizar variables de entorno:**
+   - Cambia `OPENROUTER_APP_URL` a: `https://avatar.edvio.app`
+   - Actualiza `ALLOWED_ORIGINS` a: `https://avatar.edvio.app`
+
+4. **Esperar certificado SSL:**
+   - Puede tomar 1-5 minutos para que Let's Encrypt emita el certificado
+   - Verifica los logs de Traefik si hay problemas
+
+**📖 Para más detalles sobre SSL/TLS, ver `SSL_TLS_CONFIG.md`**
+
+### 7. Verificación
 
 Después del despliegue, verifica:
 
-1. ✅ Abre la URL proporcionada por Coolify
-2. ✅ Ve a `/ws-streaming` (ej: `https://tu-dominio.com/ws-streaming`)
-3. ✅ El avatar debe conectarse automáticamente
-4. ✅ Activa el micrófono y habla
-5. ✅ Activa la cámara y verifica el análisis visual
+1. ✅ Abre la URL proporcionada por Coolify (debe ser HTTPS)
+2. ✅ Verifica que el candado verde aparece en el navegador
+3. ✅ Ve a `/ws-streaming` (ej: `https://avatar.edvio.app/ws-streaming`)
+4. ✅ El avatar debe conectarse automáticamente
+5. ✅ Activa el micrófono y habla
+6. ✅ Activa la cámara y verifica el análisis visual
 
 ## 🔍 Verificación de Variables
 

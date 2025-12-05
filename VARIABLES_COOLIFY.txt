@@ -15,14 +15,14 @@ OPENROUTER_API_KEY=sk-or-v1-tu_api_key_de_openrouter
 🟡 OPCIONALES (Tienen valores por defecto)
 ===========================================
 
-PORT=3000
+PORT=       
 NODE_ENV=production
 ALLOWED_ORIGINS=*
 DID_SERVICE=clips
 OPENROUTER_MODEL=deepseek/deepseek-chat
 OPENROUTER_VISION_MODEL=openai/gpt-4o-mini
 OPENROUTER_AUDIO_MODEL=openai/whisper
-OPENROUTER_APP_URL=https://tu-dominio.com
+OPENROUTER_APP_URL=https://avatar.edvio.app
 OPENROUTER_APP_NAME=Avatar Realtime Agent
 
 ===========================================
