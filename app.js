@@ -67,8 +67,11 @@ app.get('/health', function (req, res) {
 
 const server = http.createServer(app);
 
-server.listen(port, () =>
+// CRÍTICO: Escuchar en 0.0.0.0 para que Traefik pueda conectarse desde fuera del contenedor
+const host = process.env.HOST || '0.0.0.0';
+
+server.listen(port, host, () =>
   console.log(
-    `Server started on port localhost:${port}\nhttp://localhost:${port}\nhttp://localhost:${port}/ws-streaming`
+    `Server started on ${host}:${port}\nhttp://${host}:${port}\nhttp://${host}:${port}/ws-streaming`
   )
 );
