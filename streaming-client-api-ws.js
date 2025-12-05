@@ -2446,9 +2446,20 @@ function startConversation() {
     return;
   }
 
+  // Iniciar keep-alive para mantener la API activa
+  startKeepAlive();
+
   if (!isStreamReady) {
-    console.warn('Stream no está listo aún');
-    return;
+    // Esperar a que el stream esté listo
+    let retries = 0;
+    while (!isStreamReady && retries < 50) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      retries++;
+    }
+    if (!isStreamReady) {
+      console.error('[ERROR] Stream no está listo después de esperar');
+      return;
+    }
   }
 
   // Inicializar reconocimiento de voz (pero NO iniciarlo automáticamente)
@@ -2495,6 +2506,9 @@ function startConversation() {
 // Función reutilizable para detener conversación
 function stopConversation() {
   isConversationActive = false;
+  
+  // Detener keep-alive cuando se detiene la conversación
+  stopKeepAlive();
   
   if (recognition) {
     recognition.stop();
