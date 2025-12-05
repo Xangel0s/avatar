@@ -1577,6 +1577,10 @@ async function analyzeVisualEnvironment() {
         'X-Title': OPENROUTER_APP_NAME,
         'User-Agent': 'Avatar-Realtime-Agent/2.0',
         'Origin': window.location.origin,
+        'X-Project-Type': 'academic',
+        'X-Project-Description': 'Proyecto académico de investigación en IA conversacional',
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache',
       },
       body: JSON.stringify({
         model: OPENROUTER_VISION_MODEL,
