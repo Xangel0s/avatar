@@ -591,18 +591,35 @@ function onStreamEvent(message) {
         }
         
         // Iniciar reconocimiento automáticamente si el micrófono está activo
+        // Solo si no está ya iniciado o iniciándose
         if (micEnabled && recognition && !isStartingRecognition && !processingResponse) {
           try {
             const currentState = recognition.state;
-            if (currentState === 'stopped' || currentState === 'idle' || currentState === undefined || currentState === null) {
-              isStartingRecognition = true;
-              recognition.start();
+            // Verificar más cuidadosamente - solo iniciar si realmente está detenido
+            if (currentState === 'stopped' || currentState === 'idle') {
+              // Doble verificación: esperar un momento y verificar de nuevo
+              setTimeout(() => {
+                if (micEnabled && recognition && !isStartingRecognition && !processingResponse) {
+                  const state = recognition.state;
+                  if (state === 'stopped' || state === 'idle') {
+                    try {
+                      isStartingRecognition = true;
+                      recognition.start();
+                    } catch (e) {
+                      isStartingRecognition = false;
+                      if (e.name !== 'InvalidStateError' || !e.message.includes('already started')) {
+                        console.error('[ERROR] Error al iniciar reconocimiento:', e);
+                      }
+                    }
+                  }
+                }
+              }, 200);
             }
           } catch (error) {
+            isStartingRecognition = false;
             if (error.name !== 'InvalidStateError' || !error.message.includes('already started')) {
               console.error('[ERROR] Error al iniciar reconocimiento:', error);
             }
-            isStartingRecognition = false;
           }
         }
         
@@ -1945,9 +1962,21 @@ async function sendTextToAvatar(text) {
     return;
   }
   
+  // Esperar a que el stream esté listo con retry
   if (!isStreamReady) {
-    console.warn('[AVATAR] ⚠️ Stream no está listo aún, esperando...');
-    return;
+    // Esperar hasta 5 segundos para que el stream esté listo
+    let retries = 0;
+    const maxRetries = 50; // 50 intentos x 100ms = 5 segundos
+    
+    while (!isStreamReady && retries < maxRetries) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      retries++;
+    }
+    
+    if (!isStreamReady) {
+      console.error('[ERROR] Stream no está listo después de esperar');
+      return;
+    }
   }
   
 
