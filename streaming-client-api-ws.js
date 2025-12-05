@@ -744,7 +744,14 @@ const OPENROUTER_API_KEY = OPENROUTER_CONFIG?.apiKey || 'sk-or-v1-30540e6e2bccdb
 const OPENROUTER_MODEL = OPENROUTER_CONFIG?.model || 'deepseek/deepseek-chat';
 const OPENROUTER_VISION_MODEL = OPENROUTER_CONFIG?.visionModel || 'deepseek/deepseek-chat';
 const OPENROUTER_AUDIO_MODEL = OPENROUTER_CONFIG?.audioModel || 'openai/whisper';
-const OPENROUTER_APP_URL = OPENROUTER_CONFIG?.appUrl || 'http://localhost:3000';
+// Asegurar que OPENROUTER_APP_URL tenga el protocolo https:// si no lo tiene
+let OPENROUTER_APP_URL = OPENROUTER_CONFIG?.appUrl || 'http://localhost:3000';
+if (OPENROUTER_APP_URL && !OPENROUTER_APP_URL.startsWith('http://') && !OPENROUTER_APP_URL.startsWith('https://')) {
+  // Si no tiene protocolo, asumir HTTPS en producción
+  OPENROUTER_APP_URL = window.location.protocol === 'https:' 
+    ? `https://${OPENROUTER_APP_URL}` 
+    : `http://${OPENROUTER_APP_URL}`;
+}
 const OPENROUTER_APP_NAME = OPENROUTER_CONFIG?.appName || 'Avatar Realtime Agent';
 
 // Validar API key

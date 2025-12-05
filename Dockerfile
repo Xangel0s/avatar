@@ -39,7 +39,7 @@ cat > /app/openrouter.json << EOF
   "model": "${OPENROUTER_MODEL:-deepseek/deepseek-chat}",
   "visionModel": "${OPENROUTER_VISION_MODEL:-openai/gpt-4o-mini}",
   "audioModel": "${OPENROUTER_AUDIO_MODEL:-openai/whisper}",
-  "appUrl": "${OPENROUTER_APP_URL:-http://localhost:3000}",
+  "appUrl": "${OPENROUTER_APP_URL:-https://avatar.edvio.app}",
   "appName": "${OPENROUTER_APP_NAME:-Avatar Realtime Agent}"
 }
 EOF
