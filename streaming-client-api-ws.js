@@ -526,6 +526,29 @@ function onStreamEvent(message) {
         break;
       case 'stream/ready':
         status = 'ready';
+        isStreamReady = true;
+        
+        // IMPORTANTE: Habilitar audio del video del stream cuando esté listo
+        if (streamVideoElement && streamVideoElement.srcObject) {
+          streamVideoElement.muted = false;
+          streamVideoElement.volume = 1.0;
+        }
+        
+        // Ocultar loading overlay cuando el stream esté listo
+        if (loadingOverlay) {
+          loadingOverlay.classList.add('hidden');
+        }
+        
+        // Actualizar UI
+        updateStatusDisplay();
+        updateConnectionStatus('connected', 'Conectado');
+        
+        // Iniciar conversación automáticamente cuando el stream esté listo
+        // Esto permite que el avatar pueda hablar inmediatamente
+        if (!isConversationActive) {
+          startConversation();
+        }
+        
         break;
       case 'stream/error':
         status = 'error';
@@ -1830,6 +1853,11 @@ async function sendTextToAvatar(text) {
     console.error('[AVATAR] ❌ streamId o sessionId no están disponibles');
     console.error('[AVATAR] streamId:', streamId);
     console.error('[AVATAR] sessionId:', sessionId);
+    return;
+  }
+  
+  if (!isStreamReady) {
+    console.warn('[AVATAR] ⚠️ Stream no está listo aún, esperando...');
     return;
   }
   

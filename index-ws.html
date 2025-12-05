@@ -11,7 +11,7 @@
   <!-- Nota: Si MediaPipe no carga, la detección de gestos estará deshabilitada pero todo lo demás funcionará -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-  <style>
+    <style>
     .material-symbols-outlined {
       font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
     }
@@ -20,7 +20,7 @@
       margin: 0;
       padding: 0;
       box-sizing: border-box;
-    }
+      }
     
     html, body {
       width: 100vw;
@@ -30,7 +30,7 @@
       margin: 0;
       padding: 0;
       font-family: Inter, 'Noto Sans', sans-serif;
-    }
+      }
     
     /* Avatar a pantalla completa */
     #avatar-container {
@@ -48,7 +48,7 @@
       height: 100%;
       object-fit: cover;
       background: #FFFFFF !important;
-    }
+      }
     
     /* Asegurar que el video idle siempre esté visible cuando no hay stream */
     #idle-video-element {
@@ -64,8 +64,8 @@
       top: 0;
       left: 0;
       z-index: 2;
-    }
-    
+      }
+
     /* Header flotante superior */
     #top-header {
       position: fixed;
@@ -78,7 +78,7 @@
       justify-content: space-between;
       align-items: flex-start;
       pointer-events: none;
-    }
+      }
     
     #connection-status {
       background: rgba(36, 37, 38, 0.9);
@@ -101,7 +101,7 @@
       font-size: 0.75rem;
       font-weight: 400;
       margin-top: 0.25rem;
-    }
+      }
     
     .status-dot {
       width: 8px;
@@ -121,13 +121,13 @@
     
     .status-dot.disconnected {
       background: #ef4444;
-    }
-    
+      }
+
     #header-buttons {
       display: flex;
       gap: 0.5rem;
       pointer-events: auto;
-    }
+      }
     
     .header-btn {
       width: 40px;
@@ -146,8 +146,8 @@
     
     .header-btn:hover {
       background: rgba(58, 59, 60, 0.9);
-    }
-    
+      }
+
     /* Cámara PiP abajo izquierda */
     #user-camera-wrapper {
       position: fixed;
@@ -189,7 +189,7 @@
       border-radius: 50px;
       border: 1px solid rgba(255, 255, 255, 0.1);
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-    }
+      }
     
     .call-btn {
       width: 48px;
@@ -204,8 +204,8 @@
       background: rgba(255, 255, 255, 0.1);
       color: #e4e6eb;
       border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-    
+      }
+
     .call-btn:hover {
       transform: scale(1.1);
       background: rgba(255, 255, 255, 0.2);
@@ -214,28 +214,28 @@
     .call-btn.active {
       background: rgba(66, 184, 131, 0.3);
       border-color: #42b883;
-    }
-    
+      }
+
     .call-btn.muted {
       background: rgba(239, 68, 68, 0.3);
       border-color: #ef4444;
-    }
-    
+      }
+
     .call-btn.hangup {
       width: 56px;
       height: 56px;
       background: #ef4444;
       border-color: #ef4444;
-    }
-    
+      }
+
     .call-btn.hangup:hover {
       background: #dc2626;
     }
     
     .call-btn .material-symbols-outlined {
       font-size: 24px;
-    }
-    
+      }
+
     .call-btn.hangup .material-symbols-outlined {
       font-size: 28px;
     }
@@ -246,8 +246,8 @@
       height: 32px;
       background: rgba(255, 255, 255, 0.2);
       margin: 0 0.25rem;
-    }
-    
+      }
+
     /* Loading overlay */
     #loading-overlay {
       position: fixed;
@@ -262,8 +262,8 @@
       justify-content: center;
       z-index: 1000;
       color: #e4e6eb;
-    }
-    
+      }
+
     #loading-overlay.hidden {
       display: none;
     }
@@ -297,8 +297,8 @@
       max-height: 80vh;
       overflow-y: auto;
       color: #e4e6eb;
-    }
-    
+      }
+
     #bottom-sheet.open {
       transform: translateY(0);
     }
@@ -351,8 +351,8 @@
       color: #b0b3b8;
       letter-spacing: 0.05em;
       margin-bottom: 0.75rem;
-    }
-    
+      }
+
     .sheet-btn {
       width: 100%;
       padding: 1rem;
@@ -372,20 +372,20 @@
     
     .sheet-btn:hover {
       background: #2d2f31;
-    }
-    
+      }
+
     .status-box {
       padding: 1rem;
       background: #242526;
       border-radius: 12px;
       font-size: 0.75rem;
       color: #e4e6eb;
-    }
-    
+      }
+
     .status-box div {
       margin-bottom: 0.5rem;
-    }
-    
+      }
+
     .status-box strong {
       color: #b0b3b8;
     }
@@ -397,7 +397,7 @@
         height: 75px;
         bottom: 100px;
       }
-      
+
       .call-btn {
         width: 44px;
         height: 44px;
@@ -407,7 +407,7 @@
         width: 52px;
         height: 52px;
       }
-      
+
       #call-controls {
         gap: 0.5rem;
         padding: 0.5rem 1rem;
@@ -423,7 +423,7 @@
       }
     </style>
   </head>
-<body>
+  <body>
   <!-- Loading Overlay -->
   <div id="loading-overlay">
     <div class="spinner"></div>
