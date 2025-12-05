@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # Avatar Application (Node.js + Express)
+  avatar:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: avatar-app
+    restart: unless-stopped
+    
+    # CRÍTICO: En Coolify NO usar ports: - Traefik maneja el puerto externamente
+    # Usamos expose: para que Traefik pueda enrutar internamente usando las labels
+    expose:
+      - "3000"
+    
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DID_API_KEY=${DID_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-deepseek/deepseek-chat}
+      - OPENROUTER_VISION_MODEL=${OPENROUTER_VISION_MODEL:-openai/gpt-4o-mini}
+      - OPENROUTER_AUDIO_MODEL=${OPENROUTER_AUDIO_MODEL:-openai/whisper}
+      - OPENROUTER_APP_URL=${OPENROUTER_APP_URL:-https://avatar.edvio.app}
+      - OPENROUTER_APP_NAME=${OPENROUTER_APP_NAME:-Avatar Realtime Agent}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      - DID_SERVICE=${DID_SERVICE:-clips}
+    
+    # Labels de Traefik para SSL automático y enrutamiento
+    labels:
+      # Habilitar Traefik para este servicio
+      - "traefik.enable=true"
+      
+      # Redirección HTTP → HTTPS (entrypoint web)
+      - "traefik.http.routers.avatar-http.rule=Host(`avatar.edvio.app`)"
+      - "traefik.http.routers.avatar-http.entrypoints=web"
+      - "traefik.http.routers.avatar-http.middlewares=avatar-https-redirect"
+      
+      # Middleware para redirección HTTP → HTTPS
+      - "traefik.http.middlewares.avatar-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.avatar-https-redirect.redirectscheme.permanent=true"
+      
+      # Configuración HTTPS (entrypoint websecure)
+      - "traefik.http.routers.avatar.rule=Host(`avatar.edvio.app`)"
+      - "traefik.http.routers.avatar.entrypoints=websecure"
+      - "traefik.http.routers.avatar.tls=true"
+      - "traefik.http.routers.avatar.tls.certresolver=letsencrypt"
+      
+      # Puerto del servicio
+      - "traefik.http.services.avatar.loadbalancer.server.port=3000"
+      
+      # Health check para Traefik
+      - "traefik.http.services.avatar.loadbalancer.healthcheck.path=/health"
+      - "traefik.http.services.avatar.loadbalancer.healthcheck.interval=30s"
+    
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "--tries=1", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
