@@ -829,23 +829,32 @@ let useWhisperAPI = false; // Usar Web Speech API (Whisper requiere API de OpenA
 
 // Función para detectar si el transcript es ruido
 function isNoise(text) {
+  const trimmed = text.trim().toLowerCase();
+  
+  // Solo considerar como ruido si es muy corto Y coincide con patrones específicos
+  if (trimmed.length <= 1) {
+    return true; // Letras o caracteres individuales
+  }
+  
   const noisePatterns = [
-    /^[aeiou]{1,2}$/i, // Solo vocales
-    /^[h]{1,3}$/i, // Solo haches
-    /^[aeiouh]{1,3}$/i, // Combinaciones de vocales y haches
-    /^(ah|eh|oh|uh|hm|hmm|ehh|uhh|eh|uh|ahh|ohh)$/i, // Sonidos de relleno comunes
-    /^[a-z]{1,2}$/i, // Letras sueltas muy cortas
+    /^(ah|eh|oh|hm|uh|um|ehh|ahh|ohh)$/i, // Solo sonidos de relleno muy específicos
   ];
   
-  return noisePatterns.some(pattern => pattern.test(text.trim()));
+  // Si es muy corto (1-2 caracteres) y coincide con patrones, es ruido
+  if (trimmed.length <= 2 && noisePatterns.some(pattern => pattern.test(trimmed))) {
+    return true;
+  }
+  
+  return false;
 }
 
 // Función para verificar si el transcript tiene palabras completas
 function hasCompleteWords(text) {
-  // Debe tener al menos una palabra de 3+ caracteres o múltiples palabras
-  const words = text.trim().split(/\s+/);
-  const meaningfulWords = words.filter(w => w.length >= 3 && !isNoise(w));
-  return meaningfulWords.length >= 1 || (words.length >= 2 && words.some(w => w.length >= 2));
+  const words = text.trim().split(/\s+/).filter(w => w.length > 0);
+  
+  // Aceptar si tiene al menos 1 palabra de 2+ caracteres O 2 palabras de cualquier longitud
+  return (words.length >= 1 && words.some(w => w.length >= 2)) ||
+         words.length >= 2;
 }
 
 // Inicializar reconocimiento de voz

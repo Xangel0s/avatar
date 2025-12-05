@@ -50,7 +50,8 @@ app.use('/', express.static(__dirname));
 app.use('/', limiter);
 
 app.get('/', function (req, res) {
-  res.sendFile(__dirname + '/index.html');
+  // Redirigir automáticamente a la versión con reconocimiento de voz
+  res.redirect('/ws-streaming');
 });
 
 app.get('/ws-streaming', function (req, res) {
