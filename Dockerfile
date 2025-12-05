@@ -1,8 +1,14 @@
 # Dockerfile para producción con Node.js y Express
 FROM node:18-alpine
 
-# Instalar dependencias del sistema (wget para health check)
-RUN apk add --no-cache bash wget
+# Instalar dependencias del sistema (wget para health check, curl para ngrok)
+RUN apk add --no-cache bash wget curl unzip
+
+# Instalar ngrok
+RUN curl -o /tmp/ngrok.zip https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.zip && \
+    unzip /tmp/ngrok.zip -d /usr/local/bin && \
+    chmod +x /usr/local/bin/ngrok && \
+    rm /tmp/ngrok.zip
 
 # Crear directorio de trabajo
 WORKDIR /app
@@ -67,6 +73,49 @@ EXPOSE 3000
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Iniciar script de configuración y luego el servidor
-CMD ["/bin/sh", "-c", "/app/generate-config.sh && node app.js"]
+# Crear script para iniciar ngrok y el servidor
+RUN cat > /app/start.sh << 'START_EOF'
+#!/bin/sh
+set -e
+
+# Generar configuración
+/app/generate-config.sh
+
+# Iniciar servidor en background
+node app.js &
+SERVER_PID=$!
+
+# Esperar a que el servidor esté listo
+sleep 3
+
+# Iniciar ngrok si NGROK_AUTHTOKEN está configurado
+if [ ! -z "$NGROK_AUTHTOKEN" ]; then
+  echo "🚀 Iniciando ngrok..."
+  ngrok config add-authtoken "$NGROK_AUTHTOKEN"
+  ngrok http 3000 --log=stdout &
+  NGROK_PID=$!
+  
+  # Esperar a que ngrok esté listo
+  sleep 5
+  
+  # Obtener URL de ngrok
+  NGROK_URL=$(curl -s http://localhost:4040/api/tunnels | grep -o '"public_url":"https://[^"]*' | head -1 | cut -d'"' -f4)
+  if [ ! -z "$NGROK_URL" ]; then
+    echo "✅ Ngrok URL: $NGROK_URL"
+    echo "🌐 Accede a tu aplicación en: $NGROK_URL"
+    echo "🌐 WebSocket streaming en: $NGROK_URL/ws-streaming"
+  fi
+  
+  # Esperar a que los procesos terminen
+  wait $SERVER_PID $NGROK_PID
+else
+  echo "⚠️  NGROK_AUTHTOKEN no está configurado. Ngrok no se iniciará."
+  echo "💡 Para usar ngrok, configura la variable de entorno NGROK_AUTHTOKEN"
+  wait $SERVER_PID
+fi
+START_EOF
+RUN chmod +x /app/start.sh
+
+# Iniciar script que ejecuta configuración, servidor y ngrok
+CMD ["/app/start.sh"]
 

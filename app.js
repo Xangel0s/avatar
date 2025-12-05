@@ -70,8 +70,28 @@ const server = http.createServer(app);
 // CRÍTICO: Escuchar en 0.0.0.0 para que Traefik pueda conectarse desde fuera del contenedor
 const host = process.env.HOST || '0.0.0.0';
 
-server.listen(port, host, () =>
-  console.log(
-    `Server started on ${host}:${port}\nhttp://${host}:${port}\nhttp://${host}:${port}/ws-streaming`
-  )
-);
+server.listen(port, host, () => {
+  console.log(`✅ Server started on ${host}:${port}`);
+  console.log(`📡 Health check: http://${host}:${port}/health`);
+  console.log(`🌐 Main app: http://${host}:${port}/`);
+  console.log(`🎥 WebSocket streaming: http://${host}:${port}/ws-streaming`);
+  
+  // Si ngrok está configurado, mostrar URL después de unos segundos
+  if (process.env.NGROK_AUTHTOKEN) {
+    setTimeout(() => {
+      fetch('http://localhost:4040/api/tunnels')
+        .then(res => res.json())
+        .then(data => {
+          if (data.tunnels && data.tunnels.length > 0) {
+            const ngrokUrl = data.tunnels[0].public_url;
+            console.log(`\n🚀 Ngrok URL: ${ngrokUrl}`);
+            console.log(`🌐 Accede a tu aplicación en: ${ngrokUrl}`);
+            console.log(`🎥 WebSocket streaming en: ${ngrokUrl}/ws-streaming`);
+          }
+        })
+        .catch(() => {
+          // Ngrok aún no está listo o no está corriendo
+        });
+    }, 5000);
+  }
+});

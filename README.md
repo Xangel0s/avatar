@@ -1,155 +1,107 @@
-# MIR AAL • Avatar IA
+# Avatar Realtime Agent
 
-Avatar inteligente con análisis facial, detección de emociones y reconocimiento de objetos en tiempo real.
+Aplicación de avatar en tiempo real con análisis facial, detección de emociones e integración D-ID Live Streaming.
 
-## Características
+## 🚀 Inicio Rápido con Ngrok
 
-- 🎭 Avatar animado que habla sincronizado con síntesis de voz
-- 📹 Análisis facial en tiempo real con detección de emociones
-- 👕 Detección de ropa y objetos en el entorno
-- 🎤 Reconocimiento de voz para interacción natural
-- 💬 Chat con IA usando OpenRouter (Llama 3)
-- 🌙 Interfaz oscura profesional estilo Facebook
-- 🎥 Avatar a pantalla completa con controles flotantes
-- 🔌 Integración con D-ID Live Streaming API
+### Requisitos
 
-## Tecnologías
+- Node.js 18+
+- Docker (opcional)
+- Cuenta de ngrok (gratis en https://ngrok.com)
 
-- HTML5, CSS3, JavaScript (Vanilla)
-- Web Speech API (Reconocimiento y síntesis de voz)
-- MediaDevices API (Cámara web)
-- Canvas API (Análisis de imagen)
-- OpenRouter API (IA conversacional)
-- D-ID Live Streaming API (Avatar en tiempo real)
-- WebSockets (Comunicación en tiempo real)
+### Configuración
 
-## Instalación Local
+1. **Obtener token de ngrok**:
+   - Regístrate en https://ngrok.com
+   - Obtén tu authtoken desde el dashboard
+
+2. **Configurar variables de entorno**:
 
 ```bash
-# Clonar el repositorio
-git clone https://github.com/Xangel0s/avatar.git
-cd avatar
+# D-ID API
+DID_API_KEY=tu_email@ejemplo.com:tu_api_key_de_did
 
+# OpenRouter API
+OPENROUTER_API_KEY=sk-or-v1-tu_api_key_de_openrouter
+
+# Ngrok (requerido para HTTPS)
+NGROK_AUTHTOKEN=tu_ngrok_authtoken
+```
+
+3. **Ejecutar con Docker**:
+
+```bash
+docker build -t avatar-app .
+docker run -d \
+  -p 3000:3000 \
+  -e DID_API_KEY=tu_email@ejemplo.com:tu_api_key \
+  -e OPENROUTER_API_KEY=sk-or-v1-tu_api_key \
+  -e NGROK_AUTHTOKEN=tu_ngrok_authtoken \
+  --name avatar \
+  avatar-app
+```
+
+4. **Ver URL de ngrok**:
+
+```bash
+docker logs avatar
+```
+
+Busca la línea que dice `✅ Ngrok URL: https://...`
+
+### Ejecutar Localmente
+
+```bash
 # Instalar dependencias
 npm install
 
 # Configurar variables de entorno
-# Crear archivo config.env con:
-# OPENROUTER_API_KEY=tu_api_key
-# OPENROUTER_MODEL=meta-llama/llama-3.1-70b-instruct
-# OPENROUTER_APP_URL=http://localhost:3000
-# OPENROUTER_APP_NAME=Avatar Realtime Agent
+export DID_API_KEY=tu_email@ejemplo.com:tu_api_key
+export OPENROUTER_API_KEY=sk-or-v1-tu_api_key
+export NGROK_AUTHTOKEN=tu_ngrok_authtoken
 
-# Configurar D-ID API
-# Editar api.json y agregar tu API key de D-ID
-
-# Iniciar servidor local
+# Iniciar
 npm start
 ```
 
-Abre `http://localhost:3000/ws-streaming` en tu navegador.
+## 📋 Variables de Entorno
 
-## Despliegue en Producción
+### Requeridas
 
-### Con Docker
+- `DID_API_KEY`: API key de D-ID (formato: email:key)
+- `OPENROUTER_API_KEY`: API key de OpenRouter
+- `NGROK_AUTHTOKEN`: Token de autenticación de ngrok
 
-```bash
-# Construir imagen
-docker build -t avatar-ia .
+### Opcionales
 
-# Ejecutar contenedor
-docker run -p 80:80 -e OPENROUTER_API_KEY=tu_api_key avatar-ia
-```
+- `PORT`: Puerto del servidor (default: 3000)
+- `HOST`: Host del servidor (default: 0.0.0.0)
+- `OPENROUTER_MODEL`: Modelo de OpenRouter (default: deepseek/deepseek-chat)
+- `OPENROUTER_VISION_MODEL`: Modelo de visión (default: openai/gpt-4o-mini)
+- `OPENROUTER_APP_URL`: URL de la aplicación (se actualiza automáticamente con ngrok)
+- `OPENROUTER_APP_NAME`: Nombre de la aplicación (default: Avatar Realtime Agent)
 
-### Con Coolify
+## 🌐 Acceso
 
-1. Conecta tu repositorio de GitHub a Coolify
-2. Selecciona "Dockerfile" como Build Pack
-3. **Configura las variables de entorno requeridas:**
-   - `DID_API_KEY`: Tu API key de D-ID (formato: `email:api_key`)
-   - `OPENROUTER_API_KEY`: Tu API key de OpenRouter
-4. **Opcional**: Configura variables adicionales (ver `.env.example` o `ENV_VARIABLES.md`)
-5. Deploy!
+Una vez iniciado, ngrok generará una URL HTTPS automáticamente:
 
-**📖 Guía completa**: Ver `COOLIFY_SETUP.md` para instrucciones detalladas paso a paso.
+- **Aplicación principal**: `https://xxxx-xxxx-xxxx.ngrok-free.app`
+- **WebSocket streaming**: `https://xxxx-xxxx-xxxx.ngrok-free.app/ws-streaming`
+- **Health check**: `https://xxxx-xxxx-xxxx.ngrok-free.app/health`
 
-## Variables de Entorno
+## 🔧 Características
 
-- `OPENROUTER_API_KEY`: API key de OpenRouter (requerida)
-- `OPENROUTER_MODEL`: Modelo de IA a usar (default: meta-llama/llama-3.1-70b-instruct)
-- `OPENROUTER_APP_URL`: URL de la aplicación
-- `OPENROUTER_APP_NAME`: Nombre de la aplicación
+- ✅ Avatar en tiempo real con D-ID
+- ✅ Análisis facial con TensorFlow.js
+- ✅ Detección de gestos con MediaPipe
+- ✅ Conversación por voz con Web Speech API
+- ✅ Integración con OpenRouter (múltiples modelos LLM)
+- ✅ Análisis visual del entorno
+- ✅ HTTPS automático con ngrok
 
-## Configuración D-ID
+## 📝 Notas
 
-Edita el archivo `api.json` y agrega tu API key de D-ID:
-
-```json
-{
-  "key": "tu_api_key_aqui",
-  "url": "https://api.d-id.com",
-  "websocketUrl": "wss://ws-api.d-id.com",
-  "service": "clips",
-  "elevenlabsKey": ""
-}
-```
-
-## Estructura del Proyecto
-
-```
-avatar/
-├── index-ws.html              # Interfaz principal con avatar a pantalla completa
-├── streaming-client-api-ws.js # Lógica del cliente WebSocket
-├── app.js                     # Servidor Express
-├── package.json               # Dependencias Node.js
-├── config.env                 # Variables de entorno (no incluido en git)
-├── api.json                   # Configuración D-ID (no incluido en git)
-├── custom-llm-mock/          # Mock de LLM con integración OpenRouter
-│   ├── api/
-│   │   ├── handlers/llm/
-│   │   │   ├── complete.ts
-│   │   │   └── stream.ts
-│   │   └── lambda.ts
-│   └── config.env
-└── assets/                    # Recursos multimedia
-    ├── hombre1.jpg
-    ├── hombrevideo1.mp4
-    └── hombrevideo2.mp4
-```
-
-## Uso
-
-1. Abre `http://localhost:3000/ws-streaming` en tu navegador
-2. El avatar se conectará automáticamente
-3. Activa tu cámara web para análisis facial (botón de cámara)
-4. Activa el micrófono para reconocimiento de voz (botón de micrófono)
-5. Habla con el avatar - analizará tu entorno, ropa y emociones
-6. El avatar responderá en español con animación sincronizada
-
-## Características de la Interfaz
-
-- **Avatar a pantalla completa**: Diseño limpio con el avatar ocupando toda la pantalla
-- **Controles flotantes**: Botones estilo Facebook Messenger flotando sobre el avatar
-- **Todo desactivado por defecto**: El usuario decide qué activar (micrófono, cámara, etc.)
-- **Cámara PiP**: Vista previa de la cámara del usuario en la esquina inferior izquierda
-- **Bottom Sheet**: Panel de configuración con opciones avanzadas
-- **Diseño responsive**: Funciona perfectamente en móvil y desktop
-
-## Requisitos
-
-- Navegador moderno con soporte para:
-  - Web Speech API
-  - MediaDevices API
-  - Canvas API
-  - WebSockets
-- Cámara web (opcional, para análisis facial)
-- Micrófono (opcional, para reconocimiento de voz)
-- Node.js >= 14.0.0
-
-## Licencia
-
-MIT
-
-## Autor
-
-Xangel0s
+- La URL de ngrok cambia cada vez que reinicias (a menos que uses un plan de pago)
+- Para URLs estables, considera el plan de pago de ngrok
+- El servidor escucha en `0.0.0.0:3000` para permitir conexiones externas
