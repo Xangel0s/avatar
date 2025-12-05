@@ -883,10 +883,19 @@ let isAvatarSpeaking = false; // Flag para saber si el avatar está hablando
 // Sistema de cola para peticiones a OpenRouter (una a la vez)
 let openRouterQueue = [];
 let isProcessingOpenRouterRequest = false;
+let lastApiCallTime = 0;
+const MIN_API_CALL_INTERVAL = 500; // Mínimo 500ms entre llamadas para evitar rate limiting
 
-// Procesar cola de peticiones a OpenRouter
+// Procesar cola de peticiones a OpenRouter con rate limiting inteligente
 async function processOpenRouterQueue() {
   if (isProcessingOpenRouterRequest || openRouterQueue.length === 0) {
+    return;
+  }
+  
+  // Rate limiting: esperar si la última llamada fue muy reciente
+  const timeSinceLastCall = Date.now() - lastApiCallTime;
+  if (timeSinceLastCall < MIN_API_CALL_INTERVAL) {
+    setTimeout(() => processOpenRouterQueue(), MIN_API_CALL_INTERVAL - timeSinceLastCall);
     return;
   }
   
@@ -894,19 +903,30 @@ async function processOpenRouterQueue() {
   const request = openRouterQueue.shift();
   
   try {
+    lastApiCallTime = Date.now();
     const result = await request.fn();
     if (request.resolve) {
       request.resolve(result);
     }
   } catch (error) {
+    // Si es error 429 (Too Many Requests), esperar más tiempo
+    if (error.message && error.message.includes('429')) {
+      console.error('[ERROR] Rate limit alcanzado, esperando 5 segundos...');
+      setTimeout(() => {
+        isProcessingOpenRouterRequest = false;
+        processOpenRouterQueue();
+      }, 5000);
+      return;
+    }
+    
     if (request.reject) {
       request.reject(error);
     }
   } finally {
     isProcessingOpenRouterRequest = false;
-    // Procesar siguiente petición en la cola
+    // Procesar siguiente petición en la cola con delay mínimo
     if (openRouterQueue.length > 0) {
-      setTimeout(() => processOpenRouterQueue(), 100);
+      setTimeout(() => processOpenRouterQueue(), MIN_API_CALL_INTERVAL);
     }
   }
 }
@@ -917,6 +937,50 @@ function queueOpenRouterRequest(fn) {
     openRouterQueue.push({ fn, resolve, reject });
     processOpenRouterQueue();
   });
+}
+
+// Sistema de keep-alive para mantener la API activa (solo si no hay actividad)
+let keepAliveInterval = null;
+let lastUserActivity = Date.now();
+
+function startKeepAlive() {
+  if (keepAliveInterval) return;
+  
+  keepAliveInterval = setInterval(async () => {
+    // Solo hacer keep-alive si no hay actividad reciente (más de 30 segundos)
+    const timeSinceActivity = Date.now() - lastUserActivity;
+    if (timeSinceActivity > 30000 && !isProcessingOpenRouterRequest && openRouterQueue.length === 0) {
+      try {
+        // Llamada simple de keep-alive (sin procesar respuesta)
+        await fetch('https://openrouter.ai/api/v1/models', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+            'HTTP-Referer': OPENROUTER_APP_URL,
+            'X-Title': OPENROUTER_APP_NAME,
+            'X-Project-Type': 'academic',
+            'Accept': 'application/json',
+          },
+        }).catch(() => {
+          // Ignorar errores de keep-alive
+        });
+      } catch (e) {
+        // Ignorar errores
+      }
+    }
+  }, 60000); // Cada minuto
+}
+
+function stopKeepAlive() {
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+    keepAliveInterval = null;
+  }
+}
+
+// Actualizar actividad del usuario
+function updateUserActivity() {
+  lastUserActivity = Date.now();
 }
 
 // Variables para detección de gestos con MediaPipe Hands
@@ -1780,6 +1844,10 @@ Responde usando la información visual de la imagen. NO digas que no tienes acce
         'Content-Type': 'application/json',
         'HTTP-Referer': OPENROUTER_APP_URL,
         'X-Title': OPENROUTER_APP_NAME,
+        'X-Project-Type': 'academic',
+        'X-Project-Description': 'Proyecto académico de investigación en IA conversacional',
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache',
       },
       body: JSON.stringify({
         model: modelToUse,
