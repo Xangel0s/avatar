@@ -2260,21 +2260,24 @@ function startConversation() {
     return;
   }
 
-  // Inicializar reconocimiento de voz solo si el micrófono del usuario está activo
-  // NO iniciar reconocimiento automáticamente - solo cuando el usuario active el micrófono
-  if (!recognition && micEnabled) {
+  // Inicializar reconocimiento de voz (pero NO iniciarlo automáticamente)
+  // El reconocimiento solo se iniciará cuando el usuario active el micrófono
+  if (!recognition) {
     recognition = initSpeechRecognition();
     if (!recognition) {
       console.warn('[CONVERSACIÓN] No se pudo inicializar reconocimiento de voz');
       // Continuar de todas formas - el avatar puede hablar sin reconocimiento
+    } else {
+      console.log('[CONVERSACIÓN] ✅ Reconocimiento de voz inicializado (esperando activación del micrófono)');
     }
   }
 
   isConversationActive = true;
   conversationHistory = []; // Reiniciar historial
   
-  console.log('[CONVERSACIÓN] ✅ Conversación iniciada - El avatar puede hablar');
-  console.log('[CONVERSACIÓN] Estado micrófono usuario:', micEnabled ? 'ACTIVO (puedes hablar)' : 'INACTIVO (no puedes hablar)');
+  console.log('[CONVERSACIÓN] ✅ Conversación iniciada - El avatar puede hablar y responder');
+  console.log('[CONVERSACIÓN] ℹ️ Activa el micrófono para que el avatar te escuche');
+  console.log('[CONVERSACIÓN] Estado micrófono usuario:', micEnabled ? 'ACTIVO (puedes hablar)' : 'INACTIVO (activa el botón de micrófono)');
   console.log('[CONVERSACIÓN] Estado cámara usuario:', cameraEnabled ? 'ACTIVA (puedes ser visto)' : 'INACTIVA (no puedes ser visto)');
   
   // Mantener UI de conversación oculta por defecto
