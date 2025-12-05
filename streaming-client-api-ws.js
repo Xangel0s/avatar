@@ -2498,31 +2498,38 @@ if (micButton) {
           // 4. Esperar un momento para asegurar que el reconocimiento esté listo
           await new Promise(resolve => setTimeout(resolve, 200));
           
-          // 5. Iniciar reconocimiento de voz
-          const currentState = recognition.state;
-          if (currentState !== 'started' && currentState !== 'starting' && !isStartingRecognition) {
-            isStartingRecognition = true;
-            
-            try {
-              recognition.start();
-              await new Promise(resolve => setTimeout(resolve, 300));
-              micEnabled = true;
-              isStartingRecognition = false;
-              // Mostrar botón de detener
-              if (stopListeningButton) {
-                stopListeningButton.style.display = 'flex';
-              }
-            } catch (error) {
-              isStartingRecognition = false;
-              console.error('[UI] ❌ Error al iniciar reconocimiento:', error);
-              if (error.name === 'InvalidStateError') {
+          // 5. Iniciar reconocimiento de voz solo si el stream está listo
+          if (isStreamReady) {
+            const currentState = recognition.state;
+            if (currentState !== 'started' && currentState !== 'starting' && !isStartingRecognition) {
+              isStartingRecognition = true;
+              
+              try {
+                recognition.start();
+                await new Promise(resolve => setTimeout(resolve, 300));
                 micEnabled = true;
-              } else {
-                micEnabled = false;
+                isStartingRecognition = false;
+                // Mostrar botón de detener
+                if (stopListeningButton) {
+                  stopListeningButton.style.display = 'flex';
+                }
+                console.log('[UI] ✅ Reconocimiento de voz iniciado correctamente');
+              } catch (error) {
+                isStartingRecognition = false;
+                console.error('[UI] ❌ Error al iniciar reconocimiento:', error);
+                if (error.name === 'InvalidStateError') {
+                  micEnabled = true;
+                } else {
+                  micEnabled = false;
+                }
               }
+            } else {
+              micEnabled = true;
             }
           } else {
+            // Stream no está listo - marcar micrófono como activo pero no iniciar reconocimiento aún
             micEnabled = true;
+            console.log('[UI] ⏳ Micrófono activado, esperando a que el stream esté listo para iniciar reconocimiento...');
           }
           
           updateMicButtonState();
