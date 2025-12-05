@@ -910,7 +910,12 @@ function initSpeechRecognition() {
   // El reconocimiento funcionará sin gramáticas específicas por defecto
 
   recognition.onresult = async (event) => {
-    if (processingResponse) return;
+    if (processingResponse) {
+      console.log('[RECOGNITION] ⏸️ Ignorando resultado - procesando respuesta anterior');
+      return;
+    }
+    
+    console.log('[RECOGNITION] 🎤 Audio detectado - procesando...');
     
     // Buscar el último resultado final o el más reciente con suficiente confianza
     let finalTranscript = '';
