@@ -21,6 +21,7 @@ npm-debug.log*
 config.env
 custom-llm-mock/config.env
 api.json
+openrouter.json
 
 # Archivos de configuración local
 config.local.js

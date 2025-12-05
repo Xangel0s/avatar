@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html class="dark" lang="es">
-<head>
+  <head>
   <meta charset="utf-8"/>
   <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
   <title>Avatar Agent</title>
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection@2.1.1/dist/face-landmarks-detection.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
   <style>
@@ -22,7 +24,7 @@
       width: 100vw;
       height: 100vh;
       overflow: hidden;
-      background: #000 !important;
+      background: #FFFFFF !important;
       margin: 0;
       padding: 0;
       font-family: Inter, 'Noto Sans', sans-serif;
@@ -35,7 +37,7 @@
       left: 0;
       width: 100vw;
       height: 100vh;
-      background: #000;
+      background: #FFFFFF;
       z-index: 1;
     }
     
@@ -43,7 +45,23 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
-      background: #000;
+      background: #FFFFFF !important;
+    }
+    
+    /* Asegurar que el video idle siempre esté visible cuando no hay stream */
+    #idle-video-element {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+    
+    /* El video del stream debe estar encima del idle cuando está activo */
+    #stream-video-element {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 2;
     }
     
     /* Header flotante superior */
@@ -235,7 +253,7 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background: #000;
+      background: #FFFFFF;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -305,7 +323,7 @@
       width: 36px;
       height: 36px;
       border-radius: 50%;
-      border: none;
+        border: none;
       background: rgba(255, 255, 255, 0.1);
       color: #e4e6eb;
       cursor: pointer;
@@ -346,7 +364,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      cursor: pointer;
+        cursor: pointer;
       transition: all 0.2s;
     }
     
@@ -400,9 +418,9 @@
       #connection-status p {
         font-size: 0.75rem;
       }
-    }
-  </style>
-</head>
+      }
+    </style>
+  </head>
 <body>
   <!-- Loading Overlay -->
   <div id="loading-overlay">
@@ -411,9 +429,9 @@
   </div>
 
   <!-- Avatar a pantalla completa -->
-  <div id="avatar-container">
-    <video id="idle-video-element" autoplay loop muted playsinline></video>
-    <video id="stream-video-element" autoplay muted playsinline style="opacity: 0;"></video>
+  <div id="avatar-container" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #FFFFFF; z-index: 1;">
+    <video id="idle-video-element" autoplay loop muted playsinline style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; background: #FFFFFF; opacity: 1; z-index: 1;"></video>
+    <video id="stream-video-element" autoplay playsinline style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; background: #FFFFFF; opacity: 0; z-index: 2;"></video>
   </div>
 
   <!-- Header superior -->
@@ -429,8 +447,8 @@
       <button id="settings-button" class="header-btn" title="Configuración">
         <span class="material-symbols-outlined">settings</span>
       </button>
-    </div>
-  </div>
+        </div>
+      </div>
 
   <!-- Cámara del usuario (PiP) - Abajo izquierda -->
   <div id="user-camera-wrapper">
@@ -448,11 +466,14 @@
     <button id="screen-share-button" class="call-btn" title="Compartir pantalla">
       <span class="material-symbols-outlined">screen_share</span>
     </button>
+    <button id="stop-listening-button" class="call-btn" title="Detener escucha" style="display: none;">
+      <span class="material-symbols-outlined">stop</span>
+    </button>
     <div class="separator"></div>
     <button id="hangup-button" class="call-btn hangup" title="Finalizar">
       <span class="material-symbols-outlined">call_end</span>
     </button>
-  </div>
+      </div>
 
   <!-- Bottom Sheet -->
   <div id="bottom-sheet">
@@ -492,9 +513,9 @@
           <div><strong>Evento:</strong> <span id="status-event">N/A</span></div>
         </div>
       </div>
+      </div>
     </div>
-  </div>
 
-  <script type="module" src="./streaming-client-api-ws.js"></script>
-</body>
+    <script type="module" src="./streaming-client-api-ws.js"></script>
+  </body>
 </html>

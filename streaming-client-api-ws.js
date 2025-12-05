@@ -5,6 +5,18 @@ const DID_API = await fetchJsonFile.json();
 
 if (DID_API.key == '🤫') alert('Please put your api key inside ./api.json and restart..');
 
+// Cargar configuración de OpenRouter
+let OPENROUTER_CONFIG = null;
+try {
+  const openrouterJsonFile = await fetch('./openrouter.json');
+  OPENROUTER_CONFIG = await openrouterJsonFile.json();
+  if (!OPENROUTER_CONFIG.apiKey || OPENROUTER_CONFIG.apiKey === 'TU_API_KEY_AQUI') {
+    console.warn('[CONFIG] ⚠️ OpenRouter API key no configurada en openrouter.json');
+  }
+} catch (error) {
+  console.warn('[CONFIG] ⚠️ No se pudo cargar openrouter.json, usando valores por defecto');
+}
+
 const RTCPeerConnection = (
   window.RTCPeerConnection ||
   window.webkitRTCPeerConnection ||
@@ -99,11 +111,8 @@ async function connectToAvatar() {
           const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = data;
           streamId = newStreamId;
           sessionId = newSessionId;
-          console.log('[STREAM] init-stream recibido:', { streamId: newStreamId, sessionId: newSessionId });
-          console.log('[STREAM] Creando PeerConnection...');
           try {
             sessionClientAnswer = await createPeerConnection(offer, iceServers);
-            console.log('[STREAM] PeerConnection creado exitosamente');
             // Step 4: Send SDP answer to WebSocket
             const sdpMessage = {
               type: 'sdp',
@@ -114,7 +123,6 @@ async function connectToAvatar() {
               },
             };
             sendMessage(ws, sdpMessage);
-            console.log('[STREAM] SDP answer enviado');
           } catch (e) {
             console.error('[ERROR] Error durante configuración de stream:', e);
             console.error('[ERROR] Stack:', e.stack);
@@ -185,7 +193,7 @@ if (streamWordButton) {
           elevenlabs: { key: '' },
         },
         background: {
-          color: '#000000',
+          color: '#FFFFFF', // Fondo blanco
         },
         index, // Note : add index to track the order of the chunks (better performance), optional field
         session_id: sessionId,
@@ -305,6 +313,10 @@ function onIceConnectionStateChange() {
     iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
   }
   if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
+    // Ocultar loading overlay si hay error
+    if (loadingOverlay) {
+      loadingOverlay.classList.add('hidden');
+    }
     stopAllStreams();
     closePC();
     updateConnectionStatus('error', 'Conexión fallida');
@@ -339,19 +351,25 @@ function onConnectionStateChange() {
           streamEventLabel.innerText = 'ready';
           streamEventLabel.className = 'streamEvent-ready';
         }
-        // Auto-iniciar conversación cuando el stream esté listo
-        if (!isConversationActive) {
-          console.log('[AUTO] Stream listo, iniciando conversación automáticamente...');
-          setTimeout(() => {
-            startConversation();
-          }, 1000);
+        // Ocultar loading overlay si aún está visible
+        if (loadingOverlay) {
+          loadingOverlay.classList.add('hidden');
         }
+        updateStatusDisplay();
+        console.log('[STREAM] Stream listo - El avatar puede hablar');
+        console.log('[STREAM] Activa el micrófono para que el avatar te escuche');
       }
     }, 5000);
   } else if (state === 'connecting') {
     updateConnectionStatus('connecting', 'Conectando...');
-  } else if (state === 'failed' || state === 'closed') {
+  } else if (state === 'failed' || state === 'closed' || state === 'disconnected') {
+    // Ocultar loading overlay si hay error o desconexión
+    if (loadingOverlay) {
+      loadingOverlay.classList.add('hidden');
+    }
     updateConnectionStatus('error', 'Desconectado');
+    stopAllStreams();
+    closePC();
   }
   updateStatusDisplay();
 }
@@ -370,13 +388,43 @@ function onVideoStatusChange(videoIsPlaying, stream) {
     status = 'streaming';
     streamVideoOpacity = isStreamReady ? 1 : 0;
     setStreamVideoElement(stream);
+    
+    // Asegurar que el audio esté habilitado cuando el video está activo
+    if (streamVideoElement && isStreamReady) {
+      streamVideoElement.muted = false;
+      streamVideoElement.volume = 1.0;
+    }
   } else {
     status = 'empty';
+    // NO poner opacity a 0 - mantener el video idle visible
+    // Solo cambiar la opacidad del stream, pero mantener el idle visible
     streamVideoOpacity = 0;
+    
+    // Asegurar que el video idle esté visible
+    if (idleVideoElement) {
+      idleVideoElement.style.opacity = 1;
+      // Asegurar que el video idle esté reproduciéndose
+      if (idleVideoElement.paused) {
+        idleVideoElement.play().catch(e => {
+          console.error('[VIDEO] Error al reproducir video idle:', e);
+        });
+      }
+    }
   }
 
-  streamVideoElement.style.opacity = streamVideoOpacity;
-  idleVideoElement.style.opacity = 1 - streamVideoOpacity;
+  if (streamVideoElement) {
+    streamVideoElement.style.opacity = streamVideoOpacity;
+  }
+  
+  if (idleVideoElement) {
+    idleVideoElement.style.opacity = 1 - streamVideoOpacity;
+    // Asegurar que siempre haya un video visible (idle o stream)
+    if (streamVideoOpacity === 0 && idleVideoElement.paused) {
+      idleVideoElement.play().catch(e => {
+        console.error('[VIDEO] Error al reproducir video idle después de stream:', e);
+      });
+    }
+  }
 
   if (streamingStatusLabel) {
     streamingStatusLabel.innerText = status;
@@ -427,24 +475,34 @@ function onStreamEvent(message) {
     let status;
     const [event, _] = message.data.split(':');
 
-    console.log('[STREAM EVENT] Evento recibido:', event);
     
     switch (event) {
       case 'stream/started':
         status = 'started';
-        console.log('[STREAM EVENT] ✅ Stream iniciado');
         break;
       case 'stream/done':
         status = 'done';
-        console.log('[STREAM EVENT] ✅ Stream completado');
+        // Asegurar que el video idle se muestre cuando el stream termina
+        setTimeout(() => {
+          if (idleVideoElement) {
+            idleVideoElement.style.opacity = 1;
+            if (idleVideoElement.paused) {
+              idleVideoElement.play().catch(e => {
+                console.error('[STREAM EVENT] Error al reproducir video idle:', e);
+              });
+            }
+          }
+          // Asegurar que el stream video esté oculto
+          if (streamVideoElement) {
+            streamVideoElement.style.opacity = 0;
+          }
+        }, 200);
         break;
       case 'stream/ready':
         status = 'ready';
-        console.log('[STREAM EVENT] ✅ Stream listo para recibir datos');
         break;
       case 'stream/error':
         status = 'error';
-        console.log('[STREAM EVENT] ❌ Error en stream');
         break;
       default:
         status = 'dont-care';
@@ -454,19 +512,28 @@ function onStreamEvent(message) {
     // Set stream ready after a short delay, adjusting for potential timing differences between data and stream channels
     if (status === 'ready') {
       setTimeout(() => {
-        console.log('[STREAM EVENT] stream/ready confirmado - ocultando loading overlay');
         isStreamReady = true;
+        
+        // IMPORTANTE: Habilitar audio del video del stream cuando esté listo
+        if (streamVideoElement && streamVideoElement.srcObject) {
+          streamVideoElement.muted = false;
+          streamVideoElement.volume = 1.0;
+        }
+        
         if (streamEventLabel) {
           streamEventLabel.innerText = 'ready';
           streamEventLabel.className = 'streamEvent-ready';
         }
         // Ocultar loading overlay cuando el stream esté listo
         if (loadingOverlay) {
-          console.log('[STREAM EVENT] Ocultando loading overlay');
           loadingOverlay.classList.add('hidden');
         }
         updateStatusDisplay();
-        // Auto-inicio deshabilitado
+        
+        // Iniciar análisis visual solo si la cámara ya está activa
+        if (cameraEnabled && userCameraStream) {
+          startPeriodicVisualAnalysis();
+        }
       }, 1000);
     } else {
       console.log(event);
@@ -505,23 +572,58 @@ async function createPeerConnection(offer, iceServers) {
 }
 
 function setStreamVideoElement(stream) {
-  if (!stream) return;
+  if (!stream) {
+    console.warn('[VIDEO] ⚠️ Stream no disponible para setStreamVideoElement');
+    return;
+  }
 
   streamVideoElement.srcObject = stream;
   streamVideoElement.loop = false;
-  streamVideoElement.mute = !isStreamReady;
+  streamVideoElement.muted = !isStreamReady;
+  streamVideoElement.volume = 1.0;
 
   // safari hotfix
   if (streamVideoElement.paused) {
     streamVideoElement
       .play()
-      .then((_) => {})
-      .catch((e) => {});
+      .catch((e) => {
+        console.error('[VIDEO] ❌ Error al reproducir video del stream:', e);
+      });
   }
 }
 
 function playIdleVideo() {
-  idleVideoElement.src = DID_API.service == 'clips' ? 'alex_v2_idle.mp4' : 'emma_idle.mp4';
+  const idleVideoSrc = DID_API.service == 'clips' ? 'alex_v2_idle.mp4' : 'emma_idle.mp4';
+  console.log('[VIDEO] 🎬 Reproduciendo video idle:', idleVideoSrc);
+  
+  if (idleVideoElement) {
+    idleVideoElement.src = idleVideoSrc;
+    idleVideoElement.loop = true;
+    idleVideoElement.muted = true; // Asegurar que esté silenciado
+    idleVideoElement.style.opacity = 1; // Asegurar que esté visible
+    
+    // Asegurar que el video idle esté siempre visible cuando no hay stream
+    if (streamVideoOpacity === 0) {
+      idleVideoElement.style.opacity = 1;
+    }
+    
+    idleVideoElement.play()
+      .then(() => {
+      })
+      .catch((e) => {
+        console.error('[VIDEO] ❌ Error al reproducir video idle:', e);
+        // Intentar de nuevo después de un momento
+        setTimeout(() => {
+          if (idleVideoElement) {
+            idleVideoElement.play().catch(err => {
+              console.error('[VIDEO] ❌ Error al reintentar reproducir video idle:', err);
+            });
+          }
+        }, 1000);
+      });
+  } else {
+    console.warn('[VIDEO] ⚠️ Elemento idleVideoElement no encontrado');
+  }
 }
 
 function stopAllStreams() {
@@ -548,11 +650,12 @@ function closePC(pc = peerConnection) {
   clearInterval(statsIntervalId);
   isStreamReady = !stream_warmup;
   streamVideoOpacity = 0;
-  iceGatheringStatusLabel.innerText = '';
-  signalingStatusLabel.innerText = '';
-  iceStatusLabel.innerText = '';
-  peerStatusLabel.innerText = '';
-  streamEventLabel.innerText = '';
+  // Solo actualizar elementos si existen (compatibilidad con nuevo diseño)
+  if (iceGatheringStatusLabel) iceGatheringStatusLabel.innerText = '';
+  if (signalingStatusLabel) signalingStatusLabel.innerText = '';
+  if (iceStatusLabel) iceStatusLabel.innerText = '';
+  if (peerStatusLabel) peerStatusLabel.innerText = '';
+  if (streamEventLabel) streamEventLabel.innerText = '';
   console.log('stopped peer connection');
   if (pc === peerConnection) {
     peerConnection = null;
@@ -568,7 +671,6 @@ async function connectToWebSocket(url, token) {
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
-      console.log('WebSocket connection opened.');
       resolve(ws);
     };
 
@@ -577,17 +679,16 @@ async function connectToWebSocket(url, token) {
       reject(err);
     };
 
-    ws.onclose = () => {
-      console.log('WebSocket connection closed.');
-    };
+    ws.onclose = () => {};
   });
 }
 
 function sendMessage(ws, message) {
   if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(message));
+    const messageStr = JSON.stringify(message);
+    ws.send(messageStr);
   } else {
-    console.error('WebSocket is not open. Cannot send message.');
+    console.error('[WS] ❌ WebSocket no está abierto. Estado:', ws.readyState);
   }
 }
 
@@ -635,20 +736,61 @@ function splitArrayIntoChunks(array, size) {
 let recognition = null;
 let isConversationActive = false;
 let conversationHistory = [];
+let isInitializingRecognition = false; // Flag para prevenir múltiples inicializaciones simultáneas
+let isStartingRecognition = false; // Flag para prevenir múltiples start() simultáneos
 
-// Configuración de OpenRouter
-const OPENROUTER_API_KEY = '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';
-const OPENROUTER_MODEL = 'meta-llama/llama-3.1-70b-instruct';
-const OPENROUTER_VISION_MODEL = 'openai/gpt-4o-mini'; // Modelo con capacidad de visión
-const OPENROUTER_APP_URL = 'http://localhost:5173';
-const OPENROUTER_APP_NAME = 'Avatar Realtime Agent';
+// Configuración de OpenRouter - Cargar desde openrouter.json o usar valores por defecto
+const OPENROUTER_API_KEY = OPENROUTER_CONFIG?.apiKey || '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';
+const OPENROUTER_MODEL = OPENROUTER_CONFIG?.model || 'deepseek/deepseek-chat';
+const OPENROUTER_VISION_MODEL = OPENROUTER_CONFIG?.visionModel || 'deepseek/deepseek-chat';
+const OPENROUTER_AUDIO_MODEL = OPENROUTER_CONFIG?.audioModel || 'openai/whisper';
+const OPENROUTER_APP_URL = OPENROUTER_CONFIG?.appUrl || 'http://localhost:3000';
+const OPENROUTER_APP_NAME = OPENROUTER_CONFIG?.appName || 'Avatar Realtime Agent';
+
+// Validar API key
+if (!OPENROUTER_API_KEY || OPENROUTER_API_KEY === 'TU_API_KEY_AQUI') {
+  // API key no configurada
+}
 
 // Variables de cámara
 let userCameraStream = null;
 let userCameraVideo = null;
 let cameraAnalysisInterval = null;
 let lastAnalysisTime = 0;
-const ANALYSIS_INTERVAL = 5000; // Analizar cada 5 segundos
+const ANALYSIS_INTERVAL = 2000; // Analizar cada 2 segundos para más contexto visual
+let lastVisualAnalysis = null; // Almacenar último análisis visual para contexto
+let processingResponse = false; // Flag para evitar procesar múltiples veces
+let lastProcessedTranscript = ''; // Evitar procesar el mismo transcript dos veces
+
+// Variables para captura de audio con MediaRecorder para Whisper
+let audioRecorder = null;
+let audioChunks = [];
+let audioStreamForWhisper = null;
+let isRecordingAudio = false;
+const AUDIO_CHUNK_DURATION = 3000; // Enviar audio cada 3 segundos
+let audioRecordingInterval = null;
+let useWhisperAPI = false; // Usar Web Speech API (Whisper requiere API de OpenAI directamente, no disponible en OpenRouter)
+
+// Función para detectar si el transcript es ruido
+function isNoise(text) {
+  const noisePatterns = [
+    /^[aeiou]{1,2}$/i, // Solo vocales
+    /^[h]{1,3}$/i, // Solo haches
+    /^[aeiouh]{1,3}$/i, // Combinaciones de vocales y haches
+    /^(ah|eh|oh|uh|hm|hmm|ehh|uhh|eh|uh|ahh|ohh)$/i, // Sonidos de relleno comunes
+    /^[a-z]{1,2}$/i, // Letras sueltas muy cortas
+  ];
+  
+  return noisePatterns.some(pattern => pattern.test(text.trim()));
+}
+
+// Función para verificar si el transcript tiene palabras completas
+function hasCompleteWords(text) {
+  // Debe tener al menos una palabra de 3+ caracteres o múltiples palabras
+  const words = text.trim().split(/\s+/);
+  const meaningfulWords = words.filter(w => w.length >= 3 && !isNoise(w));
+  return meaningfulWords.length >= 1 || (words.length >= 2 && words.some(w => w.length >= 2));
+}
 
 // Inicializar reconocimiento de voz
 function initSpeechRecognition() {
@@ -661,98 +803,447 @@ function initSpeechRecognition() {
 
   recognition = new SpeechRecognition();
   recognition.continuous = true;
-  recognition.interimResults = true; // Cambiar a true para mejor detección
-  recognition.lang = 'es-ES'; // Cambiar a 'en-US' para inglés
+  recognition.interimResults = true; // Habilitar resultados intermedios para detectar audio inmediatamente
+  recognition.lang = 'es-ES';
   recognition.maxAlternatives = 1;
 
-  console.log('[AUDIO] Reconocimiento de voz inicializado');
-  console.log('[AUDIO] Idioma:', recognition.lang);
-  console.log('[AUDIO] Continuo:', recognition.continuous);
-
   recognition.onresult = async (event) => {
-    console.log('[AUDIO] Resultado recibido, resultados:', event.results.length);
-    const lastResult = event.results[event.results.length - 1];
-    const transcript = lastResult[0].transcript.trim();
+    if (processingResponse) return;
     
-    if (transcript && lastResult.isFinal) {
-      console.log('Usuario dijo:', transcript);
-      updateUserMessage(transcript);
+    // Buscar el último resultado final o el más reciente con suficiente confianza
+    let finalTranscript = '';
+    let hasFinalResult = false;
+    
+    // Primero buscar resultados finales
+    for (let i = event.results.length - 1; i >= 0; i--) {
+      const result = event.results[i];
+      if (result.isFinal) {
+        const transcript = result[0].transcript.trim();
+        const confidence = result[0].confidence || 0.5;
+        
+        // Filtrar: debe tener palabras completas (más de 3 caracteres), buena confianza y no ser ruido
+        if (transcript.length >= 3 && confidence > 0.4 && !isNoise(transcript) && hasCompleteWords(transcript)) {
+          finalTranscript = transcript;
+          hasFinalResult = true;
+          break;
+        }
+      }
+    }
+    
+    // Si no hay resultado final, verificar resultados intermedios con alta confianza
+    if (!hasFinalResult) {
+      const lastResult = event.results[event.results.length - 1];
+      const transcript = lastResult[0].transcript.trim();
+      const confidence = lastResult[0].confidence || 0.5;
       
-      // Obtener respuesta del LLM
-      await getLLMResponse(transcript);
+      // Procesar intermedios con confianza más baja para detectar voz más rápido
+      if (transcript.length >= 3 && confidence > 0.5 && !isNoise(transcript) && hasCompleteWords(transcript)) {
+        finalTranscript = transcript;
+        hasFinalResult = true;
+      }
+    }
+    
+    // Si encontramos voz clara, DETENER INMEDIATAMENTE y procesar
+    if (hasFinalResult && finalTranscript && finalTranscript !== lastProcessedTranscript) {
+      // Detener el reconocimiento INMEDIATAMENTE cuando se detecta cualquier voz
+      try {
+        recognition.stop();
+        isStartingRecognition = false;
+        processingResponse = true; // Marcar inmediatamente para evitar más detecciones
+      } catch (e) {
+        // Ignorar errores al detener
+      }
+      
+      processingResponse = true;
+      lastProcessedTranscript = finalTranscript;
+      
+      updateUserMessage(finalTranscript);
+      
+      // Procesar respuesta inmediatamente
+      await getLLMResponse(finalTranscript);
+      
+      processingResponse = false;
+      lastProcessedTranscript = ''; // Reset para permitir nuevas detecciones
+      
+      // Reiniciar reconocimiento después de que el avatar termine de responder
+      setTimeout(() => {
+        if (micEnabled && isConversationActive && recognition && !isStartingRecognition && !processingResponse) {
+          try {
+            isStartingRecognition = true;
+            recognition.start();
+          } catch (e) {
+            isStartingRecognition = false;
+          }
+        }
+      }, 1500); // Delay más largo para evitar interrupciones mientras el avatar habla
     }
   };
 
   recognition.onerror = (event) => {
-    console.error('[AUDIO] Error en reconocimiento de voz:', event.error);
-    console.error('[AUDIO] Detalles del error:', event);
-    
     if (event.error === 'no-speech') {
-      console.log('[AUDIO] No se detectó habla, reintentando...');
-      // Reiniciar si no hay habla detectada
+      // Reiniciar si no hay habla detectada y no estamos procesando
       setTimeout(() => {
-        if (isConversationActive && recognition) {
-          recognition.start();
+        if (!processingResponse && micEnabled && isConversationActive && recognition && !isStartingRecognition) {
+          try {
+            const state = recognition.state;
+            if (state === 'stopped' || state === 'idle' || state === undefined) {
+              isStartingRecognition = true;
+              recognition.start();
+            }
+          } catch (e) {
+            isStartingRecognition = false;
+          }
         }
       }, 1000);
     } else if (event.error === 'not-allowed') {
-      console.error('[AUDIO] Permisos de micrófono denegados');
-      alert('Por favor, permite el acceso al micrófono en la configuración del navegador.');
+      micEnabled = false;
+      updateMicButtonState();
+      alert('⚠️ Por favor, permite el acceso al micrófono en la configuración del navegador.');
     } else if (event.error === 'audio-capture') {
-      console.error('[AUDIO] No se pudo capturar audio');
-      alert('No se pudo acceder al micrófono. Verifica que esté conectado y funcionando.');
+      micEnabled = false;
+      updateMicButtonState();
+      alert('⚠️ No se pudo acceder al micrófono. Verifica que esté conectado y funcionando.');
     }
   };
 
   recognition.onend = () => {
-    console.log('[AUDIO] Reconocimiento de voz finalizado');
-    // Reiniciar automáticamente si la conversación está activa
-    if (isConversationActive && recognition) {
-      console.log('[AUDIO] Reiniciando reconocimiento...');
+    isStartingRecognition = false;
+    
+    // Reiniciar automáticamente solo si no estamos procesando una respuesta
+    if (!processingResponse && micEnabled && isConversationActive && recognition && !isStartingRecognition) {
       setTimeout(() => {
-        recognition.start();
-      }, 100);
+        try {
+          const state = recognition.state;
+          if ((state === 'stopped' || state === 'idle' || state === undefined) && !isStartingRecognition && !processingResponse) {
+            isStartingRecognition = true;
+            recognition.start();
+          }
+        } catch (e) {
+          isStartingRecognition = false;
+        }
+      }, 300);
     }
   };
   
   recognition.onstart = () => {
-    console.log('[AUDIO] ✅ Reconocimiento de voz iniciado - Escuchando...');
     updateListeningStatus('🎤 Escuchando...');
+    isStartingRecognition = false;
+    isInitializingRecognition = false;
+    processingResponse = false;
+    
+    if (!micEnabled) {
+      micEnabled = true;
+      updateMicButtonState();
+    }
   };
 
   return recognition;
 }
 
-// Capturar frame de la cámara y convertir a base64
-function captureCameraFrame() {
-  if (!userCameraVideo || !userCameraStream) {
-    return null;
-  }
+// ========== CAPTURA DE AUDIO CON MEDIARECORDER PARA WHISPER API ==========
 
+// Inicializar captura de audio para Whisper
+async function initAudioCaptureForWhisper() {
   try {
-    const canvas = document.createElement('canvas');
-    canvas.width = userCameraVideo.videoWidth || 640;
-    canvas.height = userCameraVideo.videoHeight || 480;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(userCameraVideo, 0, 0, canvas.width, canvas.height);
+    // Obtener stream de audio del micrófono con configuración optimizada
+    audioStreamForWhisper = await navigator.mediaDevices.getUserMedia({ 
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        sampleRate: 16000 // Whisper funciona mejor con 16kHz
+      } 
+    });
     
-    // Reducir calidad para optimizar
-    return canvas.toDataURL('image/jpeg', 0.7);
+    // Determinar el mejor formato de audio soportado
+    let mimeType = 'audio/webm';
+    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+      mimeType = 'audio/webm;codecs=opus';
+    } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+      mimeType = 'audio/webm';
+    } else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
+      mimeType = 'audio/ogg;codecs=opus';
+    } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+      mimeType = 'audio/mp4';
+    }
+    
+    // Crear MediaRecorder
+    audioRecorder = new MediaRecorder(audioStreamForWhisper, {
+      mimeType: mimeType,
+      audioBitsPerSecond: 16000
+    });
+    
+    audioChunks = [];
+    
+    audioRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        audioChunks.push(event.data);
+      }
+    };
+    
+    audioRecorder.onstop = async () => {
+      if (audioChunks.length > 0 && !processingResponse) {
+        await processAudioWithWhisper();
+      }
+      audioChunks = [];
+    };
+    
+    return true;
   } catch (error) {
-    console.error('Error capturando frame:', error);
-    return null;
+    console.error('[AUDIO] Error al inicializar captura de audio:', error);
+    return false;
   }
 }
 
-// Analizar el entorno visual usando visión del LLM
+// Procesar audio con Whisper API
+async function processAudioWithWhisper() {
+  if (processingResponse || audioChunks.length === 0) return;
+  
+  try {
+    processingResponse = true;
+    
+    // Crear blob del audio
+    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+    
+    // Verificar que el blob tenga contenido
+    if (audioBlob.size < 100) {
+      processingResponse = false;
+      return;
+    }
+    
+    // Crear FormData para enviar a Whisper
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'audio.webm');
+    formData.append('model', OPENROUTER_AUDIO_MODEL);
+    formData.append('language', 'es');
+    
+    // Enviar a Whisper API a través de OpenRouter
+    const response = await fetch('https://openrouter.ai/api/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'HTTP-Referer': OPENROUTER_APP_URL,
+        'X-Title': OPENROUTER_APP_NAME,
+      },
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Whisper API error: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    const transcript = data.text?.trim() || '';
+    
+    // Si hay transcript válido, procesarlo
+    if (transcript && transcript.length >= 3 && transcript !== lastProcessedTranscript && !isNoise(transcript) && hasCompleteWords(transcript)) {
+      lastProcessedTranscript = transcript;
+      updateUserMessage(transcript);
+      
+      // Detener grabación mientras procesamos
+      if (audioRecorder && audioRecorder.state === 'recording') {
+        audioRecorder.stop();
+      }
+      
+      // Procesar respuesta del LLM
+      await getLLMResponse(transcript);
+      
+      lastProcessedTranscript = '';
+    }
+    
+    processingResponse = false;
+    
+    // Reiniciar grabación después de procesar
+    if (micEnabled && isConversationActive && audioRecorder && audioRecorder.state === 'inactive') {
+      setTimeout(() => {
+        if (!processingResponse && micEnabled) {
+          audioChunks = [];
+          audioRecorder.start();
+        }
+      }, 500);
+    }
+    
+  } catch (error) {
+    console.error('[AUDIO] Error al procesar audio con Whisper:', error);
+    processingResponse = false;
+    
+    // Reiniciar grabación después del error
+    if (micEnabled && isConversationActive && audioRecorder && audioRecorder.state === 'inactive') {
+      setTimeout(() => {
+        if (!processingResponse && micEnabled) {
+          audioChunks = [];
+          audioRecorder.start();
+        }
+      }, 1000);
+    }
+  }
+}
+
+// Iniciar grabación de audio continua para Whisper
+function startAudioRecordingForWhisper() {
+  if (!audioRecorder || audioRecorder.state === 'recording') return;
+  
+  audioChunks = [];
+  isRecordingAudio = true;
+  
+  // Iniciar grabación
+  audioRecorder.start();
+  
+  // Enviar chunks periódicamente
+  audioRecordingInterval = setInterval(() => {
+    if (audioRecorder && audioRecorder.state === 'recording' && !processingResponse) {
+      audioRecorder.stop(); // Esto dispara onstop que procesa el chunk
+    }
+  }, AUDIO_CHUNK_DURATION);
+}
+
+// Detener grabación de audio
+function stopAudioRecordingForWhisper() {
+  isRecordingAudio = false;
+  
+  if (audioRecordingInterval) {
+    clearInterval(audioRecordingInterval);
+    audioRecordingInterval = null;
+  }
+  
+  if (audioRecorder && audioRecorder.state === 'recording') {
+    audioRecorder.stop();
+  }
+  
+  if (audioStreamForWhisper) {
+    audioStreamForWhisper.getTracks().forEach(track => track.stop());
+    audioStreamForWhisper = null;
+  }
+  
+  audioChunks = [];
+}
+
+// Inicializar detector facial
+async function initFaceDetector() {
+  try {
+    const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
+    const detectorConfig = {
+      runtime: 'tfjs',
+      refineLandmarks: true,
+      maxFaces: 5,
+    };
+    faceDetector = await faceLandmarksDetection.createDetector(model, detectorConfig);
+    
+    faceDetectionCanvas = document.createElement('canvas');
+    faceDetectionCtx = faceDetectionCanvas.getContext('2d');
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+// Detectar caras en el frame
+async function detectFacesInFrame(videoElement) {
+  if (!faceDetector || !videoElement) {
+    return [];
+  }
+
+  try {
+    faceDetectionCanvas.width = videoElement.videoWidth || 640;
+    faceDetectionCanvas.height = videoElement.videoHeight || 480;
+    faceDetectionCtx.drawImage(videoElement, 0, 0, faceDetectionCanvas.width, faceDetectionCanvas.height);
+    
+    const faces = await faceDetector.estimateFaces(faceDetectionCanvas, {
+      flipHorizontal: false,
+      staticImageMode: false,
+    });
+    
+    return faces.map((face, index) => {
+      const box = face.box;
+      return {
+        id: index,
+        x: box.xMin,
+        y: box.yMin,
+        width: box.width,
+        height: box.height,
+        confidence: face.keypoints ? face.keypoints.length : 0,
+      };
+    });
+  } catch (error) {
+    return [];
+  }
+}
+
+// Capturar frame de la cámara y convertir a base64 con detección facial
+async function captureCameraFrame() {
+  if (!userCameraVideo || !userCameraStream) {
+    return { image: null, faces: [] };
+  }
+
+  try {
+    // Verificar que el video esté realmente reproduciéndose y tenga datos
+    if (userCameraVideo.readyState < 2) {
+      // Esperar hasta que el video tenga datos
+      await new Promise((resolve) => {
+        const checkReady = () => {
+          if (userCameraVideo.readyState >= 2) {
+            resolve();
+          } else {
+            setTimeout(checkReady, 50);
+          }
+        };
+        checkReady();
+      });
+    }
+    
+    // Verificar que el video tenga dimensiones válidas
+    if (userCameraVideo.videoWidth === 0 || userCameraVideo.videoHeight === 0) {
+      return { image: null, faces: [] };
+    }
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = userCameraVideo.videoWidth;
+    canvas.height = userCameraVideo.videoHeight;
+    const ctx = canvas.getContext('2d');
+    
+    // Capturar frame actual del video
+    ctx.drawImage(userCameraVideo, 0, 0, canvas.width, canvas.height);
+    
+    // Detectar caras (opcional, puede ser lento)
+    let faces = [];
+    try {
+      faces = await detectFacesInFrame(userCameraVideo);
+      detectedFaces = faces;
+    } catch (faceError) {
+      // Si falla la detección facial, continuar sin ella
+    }
+    
+    // Convertir a base64 con calidad optimizada
+    const imageBase64 = canvas.toDataURL('image/jpeg', 0.85); // Calidad balanceada
+    
+    return { image: imageBase64, faces: faces };
+  } catch (error) {
+    console.warn('[CÁMARA] Error capturando frame:', error);
+    return { image: null, faces: [] };
+  }
+}
+
+// Analizar el entorno visual usando visión del LLM con detección de personas
 async function analyzeVisualEnvironment() {
   if (!userCameraStream || !userCameraVideo) {
     return null;
   }
 
-  const frameBase64 = captureCameraFrame();
-  if (!frameBase64) {
+  const frameData = await captureCameraFrame();
+  if (!frameData.image) {
     return null;
+  }
+
+  // Construir prompt con información de caras detectadas
+  let faceInfo = '';
+  if (frameData.faces && frameData.faces.length > 0) {
+    faceInfo = ` Se detectaron ${frameData.faces.length} persona(s) en la imagen.`;
+    frameData.faces.forEach((face, index) => {
+      faceInfo += ` Persona ${index + 1}: posición (${Math.round(face.x)}, ${Math.round(face.y)}), tamaño ${Math.round(face.width)}x${Math.round(face.height)}.`;
+    });
+  } else {
+    faceInfo = ' No se detectaron personas en la imagen.';
   }
 
   try {
@@ -772,12 +1263,24 @@ async function analyzeVisualEnvironment() {
             content: [
               {
                 type: 'text',
-                text: 'Analiza esta imagen del entorno del usuario. Describe lo que ves de manera concisa: objetos, personas, ambiente, colores, iluminación, etc. Responde en español.'
+                text: `Analiza esta imagen del entorno del usuario en detalle.${faceInfo} 
+
+Describe COMPLETAMENTE lo que ves:
+- Personas: cantidad, posición aproximada, postura, expresión facial si es visible
+- Objetos: muebles, dispositivos, decoración, cualquier objeto visible
+- Ambiente: tipo de espacio (oficina, casa, habitación, etc.), tamaño aproximado
+- Colores: colores dominantes en paredes, muebles, objetos
+- Iluminación: nivel de luz (brillante, oscuro, natural, artificial), fuentes de luz visibles
+- Detalles: cualquier detalle visible que pueda ser relevante (textos, pantallas, ventanas, puertas, etc.)
+- Estado general: orden, limpieza, ambiente (tranquilo, activo, etc.)
+
+Sé específico y detallado. NO inventes nada que no puedas ver claramente. Responde en español de forma profesional y completa.`
               },
               {
                 type: 'image_url',
                 image_url: {
-                  url: frameBase64
+                  url: frameData.image.startsWith('data:image') ? frameData.image : `data:image/jpeg;base64,${frameData.image.split(',')[1] || frameData.image}`,
+                  detail: 'high' // Alta resolución para mejor análisis
                 }
               }
             ]
@@ -788,15 +1291,12 @@ async function analyzeVisualEnvironment() {
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error('Error en análisis visual:', error);
       return null;
     }
 
     const data = await response.json();
     return data.choices?.[0]?.message?.content || null;
   } catch (error) {
-    console.error('Error analizando entorno visual:', error);
     return null;
   }
 }
@@ -804,25 +1304,135 @@ async function analyzeVisualEnvironment() {
 // Obtener respuesta del LLM usando OpenRouter
 async function getLLMResponse(userMessage) {
   try {
-    updateListeningStatus('🤔 Pensando...');
-    
-    // Obtener análisis visual si la cámara está activa
-    let visualContext = '';
-    if (userCameraStream && userCameraVideo) {
-      const visualAnalysis = await analyzeVisualEnvironment();
-      if (visualAnalysis) {
-        visualContext = `\n\n[Contexto visual del entorno: ${visualAnalysis}]`;
-        updateVisualAnalysis(visualAnalysis);
+    // Asegurar que el reconocimiento esté detenido mientras procesamos
+    if (recognition) {
+      try {
+        recognition.stop();
+        isStartingRecognition = false;
+        processingResponse = true; // Marcar que estamos procesando para evitar reinicios
+      } catch (e) {
+        // Ignorar errores
       }
     }
     
-    // Agregar mensaje del usuario al historial con contexto visual
-    const userMessageWithContext = userMessage + visualContext;
-    conversationHistory.push({ role: 'user', content: userMessageWithContext });
+    updateListeningStatus('🤔 Pensando...');
+    
+    // Validar que el mensaje del usuario no esté vacío
+    if (!userMessage || userMessage.trim() === '') {
+      return;
+    }
+    
+    // Preparar mensaje con imagen si la cámara está activa
+    let userMessageContent = userMessage;
+    let frameData = null;
+    
+    // SIEMPRE intentar capturar frame si la cámara está activa
+    if (cameraEnabled && userCameraStream && userCameraVideo) {
+      try {
+        // Verificar que el video esté reproduciéndose
+        if (userCameraVideo.paused || userCameraVideo.ended) {
+          userCameraVideo.play().catch(() => {});
+        }
+        
+        // Capturar frame actual (la función ya maneja el readyState)
+        frameData = await captureCameraFrame();
+        
+        // Si no se capturó correctamente, intentar de nuevo con más tiempo
+        if (!frameData || !frameData.image || !frameData.image.startsWith('data:image')) {
+          await new Promise(resolve => setTimeout(resolve, 150));
+          frameData = await captureCameraFrame();
+          
+          // Si aún falla, intentar una vez más
+          if (!frameData || !frameData.image || !frameData.image.startsWith('data:image')) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+            frameData = await captureCameraFrame();
+          }
+        }
+      } catch (error) {
+        console.warn('[LLM] Error capturando frame:', error);
+        frameData = null;
+      }
+    }
+    
+    // Si hay imagen, incluirla directamente en el mensaje usando modelo de visión
+    if (cameraEnabled && frameData && frameData.image && frameData.image.startsWith('data:image')) {
+      const faceCount = frameData.faces ? frameData.faces.length : 0;
+      let faceInfo = '';
+      if (faceCount > 0) {
+        faceInfo = ` Se detectaron ${faceCount} persona${faceCount > 1 ? 's' : ''} mediante reconocimiento facial.`;
+      } else {
+        faceInfo = ' No se detectaron personas mediante reconocimiento facial.';
+      }
+      
+      // Asegurar que la imagen esté en formato correcto
+      let imageUrl = frameData.image;
+      if (!imageUrl.startsWith('data:image')) {
+        imageUrl = `data:image/jpeg;base64,${imageUrl.split(',')[1] || imageUrl}`;
+      }
+      
+      // Verificar que la imagen sea válida (debe tener al menos 100 caracteres para ser una imagen base64 válida)
+      if (imageUrl.length < 100) {
+        console.warn('[LLM] ⚠️ Imagen demasiado corta, puede ser inválida. Longitud:', imageUrl.length);
+        frameData = null; // Invalidar frameData si la imagen no es válida
+      } else {
+        userMessageContent = [
+          {
+            type: 'text',
+            text: `IMPORTANTE: Tienes acceso visual completo. Analiza la imagen adjunta en detalle.${faceInfo}
+
+El usuario dice: "${userMessage}"
+
+Analiza la imagen adjunta y responde basándote en lo que REALMENTE VES:
+- Personas: cantidad, posición, características visibles
+- Objetos: muebles, dispositivos, decoración, cualquier objeto visible
+- Ambiente: tipo de espacio, tamaño, características
+- Colores: colores dominantes y detalles
+- Iluminación: nivel de luz, fuentes visibles
+- Detalles: cualquier detalle relevante visible
+
+Responde usando la información visual de la imagen. NO digas que no tienes acceso visual. Tienes una imagen adjunta que debes analizar.`
+          },
+          {
+            type: 'image_url',
+            image_url: {
+              url: imageUrl,
+              detail: 'high' // Alta resolución para mejor análisis
+            }
+          }
+        ];
+      }
+      
+      // Obtener análisis visual detallado ANTES de enviar al LLM para tener más contexto
+      const visualAnalysis = await analyzeVisualEnvironment();
+      if (visualAnalysis) {
+        lastVisualAnalysis = visualAnalysis; // Guardar último análisis
+        updateVisualAnalysis(visualAnalysis);
+        // Incluir análisis visual en el contexto del mensaje
+        const analysisText = `\n\n[Análisis visual detallado del entorno: ${visualAnalysis}]`;
+        if (Array.isArray(userMessageContent)) {
+          userMessageContent[0].text += analysisText;
+        }
+      }
+    } else if (lastVisualAnalysis) {
+      // Si no hay cámara activa pero tenemos un análisis visual previo, usarlo
+      const analysisText = `\n\n[Contexto visual del entorno: ${lastVisualAnalysis}]`;
+      userMessageContent = userMessage + analysisText;
+    }
+    
+    // Agregar mensaje del usuario al historial
+    conversationHistory.push({ role: 'user', content: userMessageContent });
     
     // Mantener solo los últimos 10 mensajes para no exceder límites
     if (conversationHistory.length > 20) {
       conversationHistory = conversationHistory.slice(-20);
+    }
+    
+    // Determinar modelo a usar - SIEMPRE usar modelo de visión si hay imagen
+    const modelToUse = frameData && frameData.image ? OPENROUTER_VISION_MODEL : OPENROUTER_MODEL;
+    
+    // Verificar que si hay imagen, se use modelo de visión
+    if (frameData && frameData.image && modelToUse !== OPENROUTER_VISION_MODEL) {
+      console.warn('[LLM] Advertencia: Hay imagen pero no se está usando modelo de visión');
     }
 
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -834,72 +1444,241 @@ async function getLLMResponse(userMessage) {
         'X-Title': OPENROUTER_APP_NAME,
       },
       body: JSON.stringify({
-        model: OPENROUTER_MODEL,
+        model: modelToUse,
         messages: [
           {
             role: 'system',
-            content: 'Eres un asistente virtual amigable y conversacional. Puedes ver el entorno del usuario a través de su cámara. Responde de manera natural y concisa, incorporando información visual cuando sea relevante.'
+            content: 'Eres un asistente virtual profesional con capacidad de VISION. Cuando recibas una imagen, analízala brevemente. Responde de forma CONCISA (máximo 2-3 oraciones). NO uses emojis. Si recibes una imagen, describe lo que ves de forma breve y directa. NUNCA digas que no tienes acceso visual si recibes una imagen.'
           },
           ...conversationHistory
         ],
         stream: false,
+        max_tokens: 150, // Limitar longitud de respuesta
+        temperature: 0.7, // Respuestas más consistentes
       }),
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`OpenRouter API error: ${response.status} - ${error}`);
+      const errorText = await response.text();
+      let errorMessage = `OpenRouter API error: ${response.status}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.error?.message) {
+          errorMessage += ` - ${errorJson.error.message}`;
+        } else {
+          errorMessage += ` - ${errorText}`;
+        }
+      } catch {
+        errorMessage += ` - ${errorText}`;
+      }
+      
+      // Si es error 401, sugerir verificar la API key
+      if (response.status === 401) {
+        errorMessage += '\n⚠️ Verifica que tu API key de OpenRouter sea válida en config.env';
+        console.error('[ERROR] API key de OpenRouter inválida o expirada');
+        console.error('[ERROR] Verifica config.env y asegúrate de que OPENROUTER_API_KEY sea correcta');
+      }
+      
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
-    const aiResponse = data.choices?.[0]?.message?.content || 'Lo siento, no pude generar una respuesta.';
     
-    console.log('Respuesta del LLM:', aiResponse);
+    // Obtener la respuesta y eliminar emojis
+    let aiResponse = data.choices?.[0]?.message?.content || '';
+    
+    // Eliminar emojis de la respuesta
+    aiResponse = aiResponse
+      .replace(/[\u{1F600}-\u{1F64F}]/gu, '') // Emojis de caras
+      .replace(/[\u{1F300}-\u{1F5FF}]/gu, '') // Emojis de símbolos
+      .replace(/[\u{1F680}-\u{1F6FF}]/gu, '') // Emojis de transporte
+      .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '') // Banderas
+      .replace(/[\u{2600}-\u{26FF}]/gu, '') // Símbolos varios
+      .replace(/[\u{2700}-\u{27BF}]/gu, '') // Dingbats
+      .replace(/[\u{FE00}-\u{FE0F}]/gu, '') // Variación selectora
+      .replace(/[\u{1F900}-\u{1F9FF}]/gu, '') // Emojis suplementarios
+      .replace(/[\u{1FA00}-\u{1FA6F}]/gu, '') // Emojis extendidos
+      .trim();
+    
+    // Limitar longitud de respuesta (máximo 200 palabras o ~1000 caracteres)
+    if (aiResponse.length > 1000) {
+      // Truncar a 200 palabras
+      const words = aiResponse.split(/\s+/);
+      if (words.length > 200) {
+        aiResponse = words.slice(0, 200).join(' ') + '...';
+      } else {
+        // Si tiene menos de 200 palabras pero más de 1000 caracteres, truncar por caracteres
+        aiResponse = aiResponse.substring(0, 1000) + '...';
+      }
+    }
+    
+    // Si la respuesta está vacía después de eliminar emojis, intentar retry
+    if (!aiResponse || aiResponse === '') {
+      const retryResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': OPENROUTER_APP_URL,
+          'X-Title': OPENROUTER_APP_NAME,
+        },
+        body: JSON.stringify({
+          model: OPENROUTER_MODEL,
+          messages: conversationHistory.slice(-3),
+          stream: false,
+        }),
+      });
+      
+      if (retryResponse.ok) {
+        const retryData = await retryResponse.json();
+        aiResponse = retryData.choices?.[0]?.message?.content || '';
+        // Eliminar emojis también del retry
+        aiResponse = aiResponse
+          .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
+          .replace(/[\u{1F300}-\u{1F5FF}]/gu, '')
+          .replace(/[\u{1F680}-\u{1F6FF}]/gu, '')
+          .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '')
+          .replace(/[\u{2600}-\u{26FF}]/gu, '')
+          .replace(/[\u{2700}-\u{27BF}]/gu, '')
+          .replace(/[\u{FE00}-\u{FE0F}]/gu, '')
+          .replace(/[\u{1F900}-\u{1F9FF}]/gu, '')
+          .replace(/[\u{1FA00}-\u{1FA6F}]/gu, '')
+          .trim();
+        
+        if (aiResponse && aiResponse !== '') {
+          updateAIResponse(aiResponse);
+          conversationHistory.push({ role: 'assistant', content: aiResponse });
+          await sendTextToAvatar(aiResponse);
+          updateListeningStatus('🎤 Escuchando...');
+          return;
+        }
+      }
+      
+      throw new Error('El modelo no generó una respuesta válida. Intenta de nuevo.');
+    }
+    
     updateAIResponse(aiResponse);
     
     // Agregar respuesta del asistente al historial
     conversationHistory.push({ role: 'assistant', content: aiResponse });
     
-    // Enviar respuesta al avatar
+    // Enviar respuesta al avatar (ya sin emojis)
     await sendTextToAvatar(aiResponse);
     
+    // Marcar que terminamos de procesar
+    processingResponse = false;
+    
     updateListeningStatus('🎤 Escuchando...');
+    
+    // Reiniciar reconocimiento después de un delay más largo para que el avatar termine de hablar
+    setTimeout(() => {
+      if (micEnabled && isConversationActive && recognition && !isStartingRecognition && !processingResponse) {
+        try {
+          isStartingRecognition = true;
+          recognition.start();
+        } catch (e) {
+          isStartingRecognition = false;
+        }
+      }
+    }, 2000); // Delay más largo (2 segundos) para evitar interrupciones mientras el avatar habla
   } catch (error) {
-    console.error('Error al obtener respuesta del LLM:', error);
-    updateListeningStatus('❌ Error: ' + error.message);
+    updateListeningStatus('❌ Error: ' + error.message.substring(0, 50));
+    
     setTimeout(() => {
       if (isConversationActive) {
         updateListeningStatus('🎤 Escuchando...');
+        // Reiniciar reconocimiento después del error
+        if (micEnabled && recognition && !isStartingRecognition && !processingResponse) {
+          try {
+            isStartingRecognition = true;
+            recognition.start();
+          } catch (e) {
+            isStartingRecognition = false;
+          }
+        }
       }
     }, 3000);
   }
 }
 
 // Enviar texto al avatar usando streaming
+// Enviar texto al avatar para que hable
+// Esta función funciona SIEMPRE, independientemente del estado de micEnabled o cameraEnabled
+// Los botones solo controlan el INPUT del usuario, no la capacidad del avatar de hablar
 async function sendTextToAvatar(text) {
-  if (!ws || ws.readyState !== WebSocket.OPEN || !streamId || !sessionId) {
-    console.error('No hay conexión activa con el avatar');
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    console.error('[AVATAR] ❌ WebSocket no está abierto. Estado:', ws?.readyState);
+    return;
+  }
+  
+  if (!streamId || !sessionId) {
+    console.error('[AVATAR] ❌ streamId o sessionId no están disponibles');
+    console.error('[AVATAR] streamId:', streamId);
+    console.error('[AVATAR] sessionId:', sessionId);
+    return;
+  }
+  
+
+  // Limpiar el texto, eliminar emojis y prepararlo para SSML
+  const cleanText = text.trim()
+    .replace(/[\u{1F600}-\u{1F64F}]/gu, '') // Emojis de caras
+    .replace(/[\u{1F300}-\u{1F5FF}]/gu, '') // Emojis de símbolos
+    .replace(/[\u{1F680}-\u{1F6FF}]/gu, '') // Emojis de transporte
+    .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '') // Banderas
+    .replace(/[\u{2600}-\u{26FF}]/gu, '') // Símbolos varios
+    .replace(/[\u{2700}-\u{27BF}]/gu, '') // Dingbats
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, '') // Variación selectora
+    .replace(/[\u{1F900}-\u{1F9FF}]/gu, '') // Emojis suplementarios
+    .replace(/[\u{1FA00}-\u{1FA6F}]/gu, '') // Emojis extendidos
+    .trim();
+    
+  if (!cleanText) {
     return;
   }
 
-  // Dividir el texto en palabras para streaming suave
-  const words = text.split(' ');
-  const chunks = words.filter(word => word.trim().length > 0);
+  // Dividir el texto en frases o chunks más grandes (no palabra por palabra)
+  // Dividir por oraciones o puntos para mejor fluidez
+  const sentences = cleanText.split(/([.!?]+\s*)/).filter(s => s.trim().length > 0);
+  const chunks = [];
   
-  // Agregar un break al final
-  chunks.push('<break time="1s" />');
-  chunks.push(''); // Indica fin del stream
+  // Agrupar oraciones en chunks de máximo 50 palabras
+  let currentChunk = '';
+  for (const sentence of sentences) {
+    const wordsInChunk = currentChunk.split(/\s+/).filter(w => w.length > 0).length;
+    const wordsInSentence = sentence.split(/\s+/).filter(w => w.length > 0).length;
+    
+    if (wordsInChunk + wordsInSentence > 50 && currentChunk.trim().length > 0) {
+      chunks.push(currentChunk.trim());
+      currentChunk = sentence;
+    } else {
+      currentChunk += sentence;
+    }
+  }
+  
+  if (currentChunk.trim().length > 0) {
+    chunks.push(currentChunk.trim());
+  }
+  
+  // Si no hay chunks (texto muy corto), enviar todo junto
+  if (chunks.length === 0) {
+    chunks.push(cleanText);
+  }
 
+
+  // Enviar cada chunk
   for (const [index, chunk] of chunks.entries()) {
+    const isLastChunk = index === chunks.length - 1;
+    const inputText = chunk + (isLastChunk ? ' <break time="500ms" />' : ' ');
+    
     const streamMessage = {
       type: 'stream-text',
       payload: {
         script: {
           type: 'text',
-          input: chunk + (chunk ? ' ' : ''),
+          input: inputText,
           provider: {
             type: 'microsoft',
-            voice_id: 'es-ES-ElviraNeural', // Voz en español, cambiar a 'en-US-JennyNeural' para inglés
+            voice_id: 'es-ES-ElviraNeural', // Voz en español
           },
           ssml: true,
         },
@@ -910,7 +1689,7 @@ async function sendTextToAvatar(text) {
           elevenlabs: { key: '' },
         },
         background: {
-          color: '#000000',
+          color: '#FFFFFF', // Fondo blanco
         },
         index,
         session_id: sessionId,
@@ -919,13 +1698,45 @@ async function sendTextToAvatar(text) {
       },
     };
 
-    sendMessage(ws, streamMessage);
-    
-    // Pequeña pausa entre chunks para mejor fluidez
-    if (chunk && index < chunks.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 50));
+    try {
+      sendMessage(ws, streamMessage);
+    } catch (error) {
+      console.error(`[AVATAR] ❌ Error al enviar chunk ${index + 1}:`, error);
     }
+    
+    // Sin delay entre chunks para respuesta más rápida
   }
+  
+  // Enviar mensaje final vacío para indicar fin del stream
+  const finalMessage = {
+    type: 'stream-text',
+    payload: {
+      script: {
+        type: 'text',
+        input: '',
+        provider: {
+          type: 'microsoft',
+          voice_id: 'es-ES-ElviraNeural',
+        },
+        ssml: true,
+      },
+      config: {
+        stitch: true,
+      },
+      apiKeysExternal: {
+        elevenlabs: { key: '' },
+      },
+      background: {
+        color: '#FFFFFF', // Fondo blanco
+      },
+      index: chunks.length,
+      session_id: sessionId,
+      stream_id: streamId,
+      presenter_type: PRESENTER_TYPE,
+    },
+  };
+  
+  sendMessage(ws, finalMessage);
 }
 
 // Actualizar UI
@@ -995,44 +1806,59 @@ function updateVisualAnalysis(analysis) {
 
 // ========== FUNCIONES DE CÁMARA ==========
 
-// Iniciar cámara del usuario
+// Iniciar cámara del usuario - TODO se maneja manualmente
 async function startUserCamera() {
   try {
+    console.log('[CÁMARA] 📷 Usuario activando cámara - Solicitando permisos...');
+    
+    // Solicitar permisos de cámara explícitamente con configuración optimizada
     userCameraStream = await navigator.mediaDevices.getUserMedia({
       video: {
-        width: { ideal: 640 },
-        height: { ideal: 480 },
-        facingMode: 'user' // Cámara frontal
+        width: { ideal: 640, min: 320 },
+        height: { ideal: 480, min: 240 },
+        facingMode: 'user', // Cámara frontal
+        frameRate: { ideal: 30, min: 15 } // Frame rate para tiempo real
       },
       audio: false
     });
+
+    console.log('[CÁMARA] ✅ Permisos de cámara otorgados');
 
     userCameraVideo = document.getElementById('user-camera-video');
     const cameraWrapper = document.getElementById('user-camera-wrapper');
 
     if (userCameraVideo && cameraWrapper) {
       userCameraVideo.srcObject = userCameraStream;
+      
+      // Asegurar que el video se reproduzca automáticamente
+      userCameraVideo.autoplay = true;
+      userCameraVideo.playsInline = true;
+      userCameraVideo.muted = true; // Necesario para autoplay en algunos navegadores
+      
+      // Forzar reproducción
+      userCameraVideo.play().catch(err => {
+        console.warn('[CÁMARA] Error al reproducir video:', err);
+      });
+      
       cameraWrapper.classList.add('active');
       cameraWrapper.classList.add('camera-active');
 
-      // Iniciar análisis periódico del entorno
-      startPeriodicVisualAnalysis();
-      
-      // Actualizar estado del botón
-      cameraEnabled = true;
-      if (typeof updateCameraButtonState === 'function') {
-        updateCameraButtonState();
+      // Iniciar análisis periódico del entorno solo si el stream está listo
+      if (isStreamReady) {
+        console.log('[CÁMARA] Iniciando análisis visual periódico...');
+        startPeriodicVisualAnalysis();
+      } else {
+        console.log('[CÁMARA] ⚠️ Stream no está listo aún - El análisis visual se iniciará cuando el avatar esté conectado');
       }
       
-      console.log('[CÁMARA] Cámara iniciada correctamente');
+      console.log('[CÁMARA] ✅ Cámara iniciada correctamente');
     }
   } catch (error) {
-    console.error('[CÁMARA] Error al acceder a la cámara:', error);
+    console.error('[CÁMARA] ❌ Error al acceder a la cámara:', error);
     cameraEnabled = false;
-    if (typeof updateCameraButtonState === 'function') {
-      updateCameraButtonState();
-    }
-    alert('Error al acceder a la cámara. Asegúrate de permitir el acceso a la cámara.');
+    // El manejo de errores se hace en el botón de cámara, no aquí
+    // Solo relanzar el error para que el botón lo maneje
+    throw error;
   }
 }
 
@@ -1076,13 +1902,22 @@ function stopUserCamera() {
 function startPeriodicVisualAnalysis() {
   stopPeriodicVisualAnalysis(); // Asegurarse de que no haya otro intervalo activo
   
+  // Hacer un análisis inmediato al iniciar para tener contexto desde el principio
+  if (userCameraStream && userCameraVideo) {
+    analyzeVisualEnvironment().then(analysis => {
+      if (analysis) {
+        lastVisualAnalysis = analysis;
+        updateVisualAnalysis(analysis);
+      }
+    });
+  }
+  
   cameraAnalysisInterval = setInterval(async () => {
-    if (userCameraStream && isConversationActive) {
+    if (userCameraStream && userCameraVideo) {
       const analysis = await analyzeVisualEnvironment();
       if (analysis) {
+        lastVisualAnalysis = analysis; // Guardar último análisis para contexto
         updateVisualAnalysis(analysis);
-        // Guardar análisis en el contexto para futuras respuestas
-        console.log('Análisis visual actualizado:', analysis);
       }
     }
   }, ANALYSIS_INTERVAL);
@@ -1132,45 +1967,42 @@ function startConversation() {
     return;
   }
 
-  // Inicializar reconocimiento de voz
-  if (!recognition) {
+  // Inicializar reconocimiento de voz solo si el micrófono del usuario está activo
+  // NO iniciar reconocimiento automáticamente - solo cuando el usuario active el micrófono
+  if (!recognition && micEnabled) {
     recognition = initSpeechRecognition();
     if (!recognition) {
-      return;
+      console.warn('[CONVERSACIÓN] No se pudo inicializar reconocimiento de voz');
+      // Continuar de todas formas - el avatar puede hablar sin reconocimiento
     }
   }
 
   isConversationActive = true;
   conversationHistory = []; // Reiniciar historial
   
+  console.log('[CONVERSACIÓN] ✅ Conversación iniciada - El avatar puede hablar');
+  console.log('[CONVERSACIÓN] Estado micrófono usuario:', micEnabled ? 'ACTIVO (puedes hablar)' : 'INACTIVO (no puedes hablar)');
+  console.log('[CONVERSACIÓN] Estado cámara usuario:', cameraEnabled ? 'ACTIVA (puedes ser visto)' : 'INACTIVA (no puedes ser visto)');
+  
   // Mantener UI de conversación oculta por defecto
   if (conversationStatusEl) {
     conversationStatusEl.style.display = 'none';
     conversationStatusEl.classList.remove('active');
   }
-  updateListeningStatus('🎤 Escuchando...');
   
-  // Solicitar permisos de micrófono explícitamente antes de iniciar
-  navigator.mediaDevices.getUserMedia({ audio: true })
-    .then((stream) => {
-      console.log('[AUDIO] ✅ Permisos de micrófono otorgados');
-      // Detener el stream inmediatamente, solo necesitábamos los permisos
-      stream.getTracks().forEach(track => track.stop());
-      
-      // Iniciar reconocimiento
-      try {
-        recognition.start();
-        console.log('[CONVERSACIÓN] ✅ Conversación iniciada');
-      } catch (error) {
-        console.error('[CONVERSACIÓN] Error al iniciar reconocimiento:', error);
-        alert('Error al iniciar el reconocimiento de voz. Verifica los permisos del micrófono.');
-      }
-    })
-    .catch((error) => {
-      console.error('[AUDIO] Error al solicitar permisos de micrófono:', error);
-      alert('Error al acceder al micrófono. Por favor, permite el acceso al micrófono.');
-      isConversationActive = false;
-    });
+  // NOTA: Los permisos ahora se solicitan manualmente cuando el usuario activa el botón de micrófono
+  // Esta función solo marca la conversación como activa, pero NO solicita permisos automáticamente
+  console.log('[CONVERSACIÓN] Conversación iniciada - El avatar puede hablar');
+  console.log('[CONVERSACIÓN] Estado micrófono usuario:', micEnabled ? 'ACTIVO (puedes hablar)' : 'INACTIVO (activa el botón de micrófono para hablar)');
+  console.log('[CONVERSACIÓN] Estado cámara usuario:', cameraEnabled ? 'ACTIVA (puedes ser visto)' : 'INACTIVA (activa el botón de cámara para ser visto)');
+  
+  // Si el micrófono ya está activo, el reconocimiento ya debería estar corriendo
+  // (se inició cuando el usuario activó el botón de micrófono)
+  if (micEnabled && recognition) {
+    console.log('[CONVERSACIÓN] Micrófono ya activo - Reconocimiento debería estar corriendo');
+  } else {
+    console.log('[CONVERSACIÓN] Activa el botón de micrófono para que el avatar te escuche');
+  }
 }
 
 // Función reutilizable para detener conversación
@@ -1258,6 +2090,7 @@ function updateStatusDisplay() {
 const micButton = document.getElementById('mic-button');
 const cameraButton = document.getElementById('camera-button');
 const settingsButton = document.getElementById('settings-button');
+const stopListeningButton = document.getElementById('stop-listening-button');
 const hangupButton = document.getElementById('hangup-button');
 const flipCameraButton = document.getElementById('flip-camera-button');
 const screenShareButton = document.getElementById('screen-share-button');
@@ -1280,28 +2113,167 @@ function updateMicButtonState() {
   }
 }
 
-// Control de micrófono
+// Control de micrófono - Solo afecta el INPUT del usuario, no el avatar
+// TODO se maneja manualmente - el usuario debe activar el botón para solicitar permisos
 if (micButton) {
-  micButton.onclick = () => {
-    micEnabled = !micEnabled;
-    console.log('[UI] Micrófono:', micEnabled ? 'ACTIVADO' : 'DESACTIVADO');
+  micButton.onclick = async () => {
+    // Prevenir múltiples clics simultáneos
+    if (isInitializingRecognition || isStartingRecognition) {
+      console.log('[UI] ⚠️ Ya se está inicializando el reconocimiento, espera...');
+      return;
+    }
     
-    updateMicButtonState();
-    
-    if (micEnabled) {
-      if (isConversationActive && recognition) {
-        recognition.start();
-        console.log('[UI] Reconocimiento de voz iniciado');
+    if (!micEnabled) {
+      // ACTIVAR MICRÓFONO - Solicitar permisos manualmente
+      console.log('[UI] 🔵 Usuario activando micrófono - Solicitando permisos...');
+      
+      // Verificar que el stream esté listo
+      if (!isStreamReady) {
+        console.warn('[UI] ⚠️ Stream no está listo aún. Espera a que el avatar se conecte.');
+        micEnabled = false;
+        updateMicButtonState();
+        return;
       }
+      
+      // Marcar que estamos inicializando
+      isInitializingRecognition = true;
+      
+      try {
+        // Usar Whisper API en lugar de Web Speech API
+        if (useWhisperAPI) {
+          // 1. Inicializar captura de audio para Whisper
+          const audioInitSuccess = await initAudioCaptureForWhisper();
+          if (!audioInitSuccess) {
+            console.error('[UI] ❌ No se pudo inicializar captura de audio para Whisper');
+            micEnabled = false;
+            updateMicButtonState();
+            isInitializingRecognition = false;
+            return;
+          }
+          
+          // 2. Iniciar conversación si no está activa
+          if (!isConversationActive) {
+            console.log('[UI] 🎤 Iniciando conversación con Whisper API...');
+            isConversationActive = true;
+            conversationHistory = [];
+          }
+          
+          // 3. Iniciar grabación de audio continua
+          startAudioRecordingForWhisper();
+          
+          micEnabled = true;
+          isInitializingRecognition = false;
+          updateMicButtonState();
+          console.log('[UI] ✅ Micrófono ACTIVADO con Whisper API - Puedes hablar con el avatar');
+        } else {
+          // Código original con Web Speech API (fallback)
+          // 1. Solicitar permisos de micrófono explícitamente
+          console.log('[UI] 📢 Solicitando permisos de micrófono...');
+          const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          console.log('[UI] ✅ Permisos de micrófono otorgados');
+          
+          // Detener el stream inmediatamente, solo necesitábamos los permisos
+          audioStream.getTracks().forEach(track => track.stop());
+          
+          // 2. Inicializar reconocimiento de voz si no existe
+          if (!recognition) {
+            recognition = initSpeechRecognition();
+            if (!recognition) {
+              console.error('[UI] ❌ No se pudo inicializar reconocimiento de voz');
+              micEnabled = false;
+              updateMicButtonState();
+              return;
+            }
+          }
+          
+          // 3. Iniciar conversación si no está activa
+          if (!isConversationActive) {
+            console.log('[UI] 🎤 Iniciando conversación...');
+            isConversationActive = true;
+            conversationHistory = [];
+          }
+          
+          // 4. Esperar un momento para asegurar que el reconocimiento esté listo
+          await new Promise(resolve => setTimeout(resolve, 200));
+          
+          // 5. Iniciar reconocimiento de voz
+          const currentState = recognition.state;
+          if (currentState !== 'started' && currentState !== 'starting' && !isStartingRecognition) {
+            isStartingRecognition = true;
+            
+            try {
+              recognition.start();
+              await new Promise(resolve => setTimeout(resolve, 300));
+              micEnabled = true;
+              isStartingRecognition = false;
+              // Mostrar botón de detener
+              if (stopListeningButton) {
+                stopListeningButton.style.display = 'flex';
+              }
+            } catch (error) {
+              isStartingRecognition = false;
+              console.error('[UI] ❌ Error al iniciar reconocimiento:', error);
+              if (error.name === 'InvalidStateError') {
+                micEnabled = true;
+              } else {
+                micEnabled = false;
+              }
+            }
+          } else {
+            micEnabled = true;
+          }
+          
+          updateMicButtonState();
+          console.log('[UI] ✅ Micrófono ACTIVADO - Puedes hablar con el avatar');
+          isInitializingRecognition = false;
+        }
+      } catch (error) {
+        isInitializingRecognition = false; // Liberar el flag en caso de error
+        isStartingRecognition = false; // También liberar el flag de inicio
+        console.error('[UI] ❌ Error al solicitar permisos de micrófono:', error);
+        micEnabled = false;
+        updateMicButtonState();
+        
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+          alert('⚠️ Permisos de micrófono denegados. Por favor, permite el acceso al micrófono en la configuración del navegador.');
+        } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+          alert('⚠️ No se encontró ningún micrófono. Por favor, conecta un micrófono e intenta de nuevo.');
+        } else {
+          alert('⚠️ Error al acceder al micrófono: ' + error.message);
+        }
+      }
+      
     } else {
-      if (recognition) {
-        recognition.stop();
-        console.log('[UI] Reconocimiento de voz detenido');
+      // DESACTIVAR MICRÓFONO
+      console.log('[UI] 🔴 Usuario desactivando micrófono');
+      micEnabled = false;
+      updateMicButtonState();
+      
+      // Detener reconocimiento de voz - El usuario ya no puede hablar
+      // PERO el avatar puede seguir hablando normalmente
+      if (useWhisperAPI) {
+        stopAudioRecordingForWhisper();
+        console.log('[UI] ✅ Grabación de audio con Whisper detenida - Ya no puedes hablar');
+        console.log('[UI] ℹ️ El avatar puede seguir hablando normalmente');
+        updateListeningStatus('');
+      } else if (recognition) {
+        try {
+          recognition.stop();
+          console.log('[UI] ✅ Reconocimiento de voz detenido - Ya no puedes hablar');
+          console.log('[UI] ℹ️ El avatar puede seguir hablando normalmente');
+          updateListeningStatus('');
+          // Ocultar botón de detener
+          if (stopListeningButton) {
+            stopListeningButton.style.display = 'none';
+          }
+        } catch (error) {
+          console.error('[UI] Error al detener reconocimiento:', error);
+        }
       }
     }
   };
   
-  // Inicializar estado visual
+  // Inicializar estado visual (desactivado por defecto)
   updateMicButtonState();
 }
 
@@ -1323,26 +2295,48 @@ function updateCameraButtonState() {
   }
 }
 
-// Control de cámara
+// Control de cámara - Solo afecta si el USUARIO puede ser visto, no el avatar
 if (cameraButton) {
   cameraButton.onclick = async () => {
-    cameraEnabled = !cameraEnabled;
-    console.log('[UI] Cámara:', cameraEnabled ? 'ACTIVADA' : 'DESACTIVADA');
-    
-    updateCameraButtonState();
-    
-    if (cameraEnabled) {
+    if (!cameraEnabled) {
+      // ACTIVAR CÁMARA - Solicitar permisos manualmente
+      console.log('[UI] 🔵 Usuario activando cámara - Solicitando permisos...');
+      
       try {
         await startUserCamera();
-        console.log('[UI] Cámara iniciada correctamente');
+        cameraEnabled = true;
+        updateCameraButtonState();
+        console.log('[UI] ✅ Cámara ACTIVADA - El avatar puede verte');
+        
+        // Iniciar análisis visual periódico para que el avatar vea al usuario
+        if (isStreamReady) {
+          startPeriodicVisualAnalysis();
+          console.log('[UI] ✅ Análisis visual iniciado - El avatar está analizando tu entorno');
+        } else {
+          console.log('[UI] ⚠️ Stream no está listo aún - El análisis visual se iniciará cuando el avatar esté conectado');
+        }
       } catch (error) {
-        console.error('[UI] Error al iniciar cámara:', error);
+        console.error('[UI] ❌ Error al activar cámara:', error);
         cameraEnabled = false;
         updateCameraButtonState();
+        
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+          alert('⚠️ Permisos de cámara denegados. Por favor, permite el acceso a la cámara en la configuración del navegador.');
+        } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+          alert('⚠️ No se encontró ninguna cámara. Por favor, conecta una cámara e intenta de nuevo.');
+        } else {
+          alert('⚠️ Error al acceder a la cámara: ' + error.message);
+        }
       }
     } else {
+      // DESACTIVAR CÁMARA
+      console.log('[UI] 🔴 Usuario desactivando cámara');
       stopUserCamera();
-      console.log('[UI] Cámara detenida');
+      stopPeriodicVisualAnalysis();
+      cameraEnabled = false;
+      updateCameraButtonState();
+      console.log('[UI] ✅ Cámara DESACTIVADA - Ya no puedes ser visto');
+      console.log('[UI] ℹ️ El avatar sigue visible normalmente');
     }
   };
   
@@ -1504,6 +2498,26 @@ if (testAudioButton) {
   };
 }
 
+// Botón para detener reconocimiento de voz
+if (stopListeningButton) {
+  stopListeningButton.onclick = () => {
+    if (recognition) {
+      try {
+        recognition.stop();
+        isStartingRecognition = false;
+        processingResponse = true; // Evitar reinicio automático
+        micEnabled = false;
+        updateMicButtonState();
+        updateListeningStatus('');
+        stopListeningButton.style.display = 'none';
+        console.log('[UI] ✅ Reconocimiento de voz detenido manualmente');
+      } catch (error) {
+        console.error('[UI] Error al detener reconocimiento:', error);
+      }
+    }
+  };
+}
+
 // Botón de colgar
 if (hangupButton) {
   hangupButton.onclick = () => {
@@ -1533,24 +2547,46 @@ if (hangupButton) {
 // Auto-inicio deshabilitado - usar controles manuales
 
 // Inicialización completa - el código está listo para ejecutarse
-console.log('Avatar Realtime Agent inicializado correctamente');
-console.log('DID_API configurado:', {
-  service: DID_API.service,
-  websocketUrl: DID_API.websocketUrl,
-  hasKey: !!DID_API.key
-});
+// Inicializar detector facial al cargar
+(async function initOnLoad() {
+  await initFaceDetector();
+})();
 
-// Auto-iniciar conexión al cargar la página (botón eliminado)
-if (loadingOverlay) {
+// Auto-iniciar conexión al cargar la página
+(async function autoInit() {
   // Esperar un momento para asegurar que el DOM esté listo
-  setTimeout(async () => {
-    if (!peerConnection || peerConnection.connectionState !== 'connected') {
-      console.log('[INICIO] Auto-iniciando conexión con el avatar...');
-      updateConnectionStatus('connecting', 'Conectando...');
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  // Asegurar que el video idle esté configurado desde el inicio
+  if (idleVideoElement) {
+    console.log('[INICIO] Configurando video idle...');
+    playIdleVideo();
+  }
+  
+  if (loadingOverlay) {
+    // Mostrar loading overlay mientras se conecta
+    loadingOverlay.classList.remove('hidden');
+  }
+  
+  if (!peerConnection || peerConnection?.connectionState !== 'connected') {
+    console.log('[INICIO] Auto-iniciando conexión con el avatar...');
+    updateConnectionStatus('connecting', 'Conectando...');
+    try {
       await connectToAvatar();
+    } catch (error) {
+      console.error('[INICIO] Error al conectar:', error);
+      if (loadingOverlay) {
+        loadingOverlay.classList.add('hidden');
+      }
+      updateConnectionStatus('error', 'Error de conexión');
     }
-  }, 500);
-}
+  } else {
+    // Ya está conectado, ocultar loading
+    if (loadingOverlay) {
+      loadingOverlay.classList.add('hidden');
+    }
+  }
+})();
 
 // Logs de debugging mejorados
 console.log('Para iniciar el avatar:');
