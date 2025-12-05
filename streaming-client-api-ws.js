@@ -1048,8 +1048,27 @@ function initSpeechRecognition() {
   // El reconocimiento funcionará sin gramáticas específicas por defecto
 
   recognition.onresult = async (event) => {
-    if (processingResponse || isAvatarSpeaking) {
+    if (processingResponse) {
       return;
+    }
+    
+    // CRÍTICO: Si el avatar está hablando y detectamos voz del usuario, DETENER el avatar inmediatamente
+    if (isAvatarSpeaking) {
+      // Detener el stream del avatar inmediatamente
+      try {
+        if (ws && ws.readyState === WebSocket.OPEN && streamId) {
+          const stopMessage = {
+            type: 'stop-stream',
+            payload: {
+              session_id: sessionId,
+            },
+          };
+          ws.send(JSON.stringify(stopMessage));
+          isAvatarSpeaking = false;
+        }
+      } catch (e) {
+        // Ignorar errores
+      }
     }
     
     // Buscar el último resultado final o el más reciente con suficiente confianza
@@ -1064,7 +1083,6 @@ function initSpeechRecognition() {
         const confidence = result[0].confidence || 0.5;
         
         // Filtrar: debe tener palabras completas, buena confianza y no ser ruido
-        // Reducir umbral de confianza y longitud mínima para detectar mejor el audio
         if (transcript.length >= 2 && confidence > 0.3 && !isNoise(transcript) && hasCompleteWords(transcript)) {
           finalTranscript = transcript;
           hasFinalResult = true;
@@ -1080,15 +1098,14 @@ function initSpeechRecognition() {
       const confidence = lastResult[0].confidence || 0.5;
       
       // Procesar intermedios con confianza más baja para detectar voz más rápido
-      // Reducir umbrales para detectar mejor el audio de la máquina
       if (transcript.length >= 2 && confidence > 0.4 && !isNoise(transcript) && hasCompleteWords(transcript)) {
         finalTranscript = transcript;
         hasFinalResult = true;
       }
     }
     
-    // Si encontramos voz clara, DETENER INMEDIATAMENTE y procesar
-    if (hasFinalResult && finalTranscript && finalTranscript !== lastProcessedTranscript && !processingResponse && !isAvatarSpeaking) {
+    // Si encontramos voz clara, DETENER INMEDIATAMENTE reconocimiento y procesar
+    if (hasFinalResult && finalTranscript && finalTranscript !== lastProcessedTranscript && !processingResponse) {
       // Detener el reconocimiento INMEDIATAMENTE cuando se detecta cualquier voz
       try {
         recognition.stop();
@@ -1856,20 +1873,21 @@ Responde usando la información visual de la imagen. NO digas que no tienes acce
             role: 'system',
             content: `Eres un asistente virtual conversacional, amigable y natural. Hablas como una persona real en una conversación casual. 
 
-REGLAS IMPORTANTES:
-- Responde de forma CONCISA (máximo 2-3 oraciones, idealmente 1-2)
+REGLAS CRÍTICAS:
+- Responde de forma MUY BREVE (máximo 1-2 oraciones, idealmente 1)
 - NO uses emojis
 - Mantén un tono conversacional y natural
-- Si recibes una imagen, analízala brevemente y menciona lo más relevante de forma natural
-- NUNCA digas que no tienes acceso visual si recibes una imagen
+- Para saludos simples como "hola", "cómo estás", responde con UNA SOLA ORACIÓN breve
+- Solo menciona el entorno visual si el usuario pregunta específicamente por él
+- NO describas el fondo o entorno a menos que el usuario lo pida explícitamente
 - Responde como si estuvieras viendo y escuchando a la persona en tiempo real
-- Sé proactivo: haz preguntas relevantes cuando sea apropiado
-- Mantén el contexto de la conversación de forma natural`
+- Mantén el contexto de la conversación de forma natural
+- Sé directo y conciso`
           },
           ...conversationHistory
         ],
         stream: false,
-        max_tokens: 80, // Respuestas más cortas (reducido de 150)
+        max_tokens: 50, // Respuestas MUY cortas (1-2 oraciones máximo)
         temperature: 0.7, // Respuestas más consistentes
       }),
     });
