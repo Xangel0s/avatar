@@ -30,33 +30,31 @@ services:
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
       - DID_SERVICE=${DID_SERVICE:-clips}
     
-    # Labels de Traefik para SSL automático y enrutamiento
-    labels:
-      # Habilitar Traefik para este servicio
-      - "traefik.enable=true"
-      
-      # Redirección HTTP → HTTPS (entrypoint web)
-      - "traefik.http.routers.avatar-http.rule=Host(`avatar.edvio.app`)"
-      - "traefik.http.routers.avatar-http.entrypoints=web"
-      - "traefik.http.routers.avatar-http.middlewares=avatar-https-redirect"
-      
-      # Middleware para redirección HTTP → HTTPS
-      - "traefik.http.middlewares.avatar-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.avatar-https-redirect.redirectscheme.permanent=true"
-      
-      # Configuración HTTPS (entrypoint websecure)
-      - "traefik.http.routers.avatar.rule=Host(`avatar.edvio.app`)"
-      - "traefik.http.routers.avatar.entrypoints=websecure"
-      - "traefik.http.routers.avatar.tls=true"
-      - "traefik.http.routers.avatar.tls.certresolver=letsencrypt"
-      
-      # Puerto del servicio
-      - "traefik.http.services.avatar.loadbalancer.server.port=3000"
-      
-      # IMPORTANTE: No usar healthcheck en labels de Traefik si el servicio no está listo
-      # Traefik esperará a que el health check pase antes de enrutar tráfico
-      # - "traefik.http.services.avatar.loadbalancer.healthcheck.path=/health"
-      # - "traefik.http.services.avatar.loadbalancer.healthcheck.interval=30s"
+    # IMPORTANTE: En Coolify, NO usar labels de Traefik manualmente
+    # Coolify configura Traefik automáticamente cuando agregas el dominio en la interfaz
+    # Si necesitas usar labels manuales, primero verifica los entrypoints de Traefik
+    # 
+    # Para usar labels manuales, primero ejecuta en el servidor:
+    # docker exec coolify-proxy wget -qO- http://localhost:8080/api/entrypoints
+    # 
+    # Luego ajusta los entrypoints según lo que encuentres
+    #
+    # OPCIÓN 1: Dejar que Coolify configure automáticamente (RECOMENDADO)
+    # - Ve a tu aplicación en Coolify
+    # - Sección "Domains" o "FQDNs"
+    # - Agrega "avatar.edvio.app" con HTTPS
+    # - Coolify configurará Traefik automáticamente
+    #
+    # OPCIÓN 2: Usar labels manuales (solo si conoces los entrypoints correctos)
+    # Descomenta las labels de abajo y ajusta los entrypoints según tu configuración
+    #
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.avatar.rule=Host(`avatar.edvio.app`)"
+    #   - "traefik.http.routers.avatar.entrypoints=websecure"
+    #   - "traefik.http.routers.avatar.tls=true"
+    #   - "traefik.http.routers.avatar.tls.certresolver=letsencrypt"
+    #   - "traefik.http.services.avatar.loadbalancer.server.port=3000"
     
     healthcheck:
       test: ["CMD", "wget", "--spider", "--quiet", "--tries=1", "http://127.0.0.1:3000/health"]
