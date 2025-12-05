@@ -15,7 +15,7 @@ WORKDIR /app
 
 # Copiar package.json e instalar dependencias
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm install --only=production
 
 # Copiar todos los archivos de la aplicación
 COPY . .
@@ -73,59 +73,6 @@ EXPOSE 3000
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Crear script para iniciar ngrok y el servidor
-RUN cat > /app/start.sh << 'START_EOF'
-#!/bin/sh
-set -e
-
-# Generar configuración
-/app/generate-config.sh
-
-# Iniciar ngrok si NGROK_AUTHTOKEN está configurado
-if [ ! -z "$NGROK_AUTHTOKEN" ]; then
-  echo "🚀 Configurando ngrok..."
-  ngrok config add-authtoken "$NGROK_AUTHTOKEN" 2>/dev/null || true
-  
-  echo "🚀 Iniciando ngrok en background..."
-  ngrok http 3000 --log=stdout > /tmp/ngrok.log 2>&1 &
-  NGROK_PID=$!
-  
-  # Esperar a que ngrok esté listo
-  echo "⏳ Esperando a que ngrok esté listo..."
-  sleep 8
-  
-  # Obtener URL de ngrok
-  NGROK_URL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | grep -o '"public_url":"https://[^"]*' | head -1 | cut -d'"' -f4 || echo "")
-  if [ ! -z "$NGROK_URL" ]; then
-    echo ""
-    echo "✅ ========================================="
-    echo "✅ Ngrok URL: $NGROK_URL"
-    echo "✅ ========================================="
-    echo "🌐 Accede a tu aplicación en: $NGROK_URL"
-    echo "🎥 WebSocket streaming en: $NGROK_URL/ws-streaming"
-    echo "📊 Ngrok dashboard: http://localhost:4040"
-    echo "✅ ========================================="
-    echo ""
-    
-    # Actualizar openrouter.json con la URL de ngrok
-    if [ -f /app/openrouter.json ]; then
-      sed -i "s|\"appUrl\":\".*\"|\"appUrl\":\"$NGROK_URL\"|g" /app/openrouter.json
-      echo "✅ openrouter.json actualizado con URL de ngrok"
-    fi
-  else
-    echo "⚠️  No se pudo obtener la URL de ngrok. Revisa los logs: /tmp/ngrok.log"
-  fi
-else
-  echo "⚠️  NGROK_AUTHTOKEN no está configurado. Ngrok no se iniciará."
-  echo "💡 Para usar ngrok, configura la variable de entorno NGROK_AUTHTOKEN"
-fi
-
-# Iniciar servidor (en foreground para que el contenedor no termine)
-echo "🚀 Iniciando servidor Node.js..."
-exec node app.js
-START_EOF
-RUN chmod +x /app/start.sh
-
 # Iniciar script que ejecuta configuración, servidor y ngrok
-CMD ["/app/start.sh"]
+CMD /bin/sh -c "/app/generate-config.sh && if [ ! -z \"\$NGROK_AUTHTOKEN\" ]; then ngrok config add-authtoken \"\$NGROK_AUTHTOKEN\" 2>/dev/null || true; ngrok http 3000 --log=stdout > /tmp/ngrok.log 2>&1 & sleep 8; NGROK_URL=\$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | grep -o '\"public_url\":\"https://[^\"]*' | head -1 | cut -d'\"' -f4 || echo ''); if [ ! -z \"\$NGROK_URL\" ]; then echo ''; echo '✅ ========================================='; echo \"✅ Ngrok URL: \$NGROK_URL\"; echo '✅ ========================================='; echo \"🌐 Accede a tu aplicación en: \$NGROK_URL\"; echo \"🎥 WebSocket streaming en: \$NGROK_URL/ws-streaming\"; echo '✅ ========================================='; echo ''; if [ -f /app/openrouter.json ]; then sed -i \"s|\\\"appUrl\\\":\\\".*\\\"|\\\"appUrl\\\":\\\"\$NGROK_URL\\\"|g\" /app/openrouter.json; fi; fi; fi; exec node app.js"
 

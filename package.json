@@ -28,8 +28,5 @@
     "express": "^4.21.0",
     "express-rate-limit": "^7.5.0",
     "ws": "^8.18.0"
-  },
-  "devDependencies": {
-    "@ngrok/ngrok": "^1.0.0"
   }
 }
