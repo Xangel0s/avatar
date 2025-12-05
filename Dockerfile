@@ -1,8 +1,8 @@
 # Dockerfile para producción con Node.js y Express
 FROM node:18-alpine
 
-# Instalar dependencias del sistema
-RUN apk add --no-cache bash
+# Instalar dependencias del sistema (wget para health check)
+RUN apk add --no-cache bash wget
 
 # Crear directorio de trabajo
 WORKDIR /app
