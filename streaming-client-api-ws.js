@@ -862,6 +862,14 @@ function initSpeechRecognition() {
   recognition.interimResults = true; // Habilitar resultados intermedios para detectar audio inmediatamente
   recognition.lang = 'es-ES';
   recognition.maxAlternatives = 1;
+  
+  // Configuraciones adicionales para mejorar la detección
+  recognition.serviceURI = ''; // Usar el servicio por defecto del navegador
+  
+  // Ajustar sensibilidad - algunos navegadores soportan esto
+  if (recognition.grammars) {
+    recognition.grammars = null; // No usar gramáticas específicas, detectar cualquier habla
+  }
 
   recognition.onresult = async (event) => {
     if (processingResponse) return;
@@ -877,8 +885,9 @@ function initSpeechRecognition() {
         const transcript = result[0].transcript.trim();
         const confidence = result[0].confidence || 0.5;
         
-        // Filtrar: debe tener palabras completas (más de 3 caracteres), buena confianza y no ser ruido
-        if (transcript.length >= 3 && confidence > 0.4 && !isNoise(transcript) && hasCompleteWords(transcript)) {
+        // Filtrar: debe tener palabras completas, buena confianza y no ser ruido
+        // Reducir umbral de confianza y longitud mínima para detectar mejor el audio
+        if (transcript.length >= 2 && confidence > 0.3 && !isNoise(transcript) && hasCompleteWords(transcript)) {
           finalTranscript = transcript;
           hasFinalResult = true;
           break;
@@ -893,7 +902,8 @@ function initSpeechRecognition() {
       const confidence = lastResult[0].confidence || 0.5;
       
       // Procesar intermedios con confianza más baja para detectar voz más rápido
-      if (transcript.length >= 3 && confidence > 0.5 && !isNoise(transcript) && hasCompleteWords(transcript)) {
+      // Reducir umbrales para detectar mejor el audio de la máquina
+      if (transcript.length >= 2 && confidence > 0.4 && !isNoise(transcript) && hasCompleteWords(transcript)) {
         finalTranscript = transcript;
         hasFinalResult = true;
       }

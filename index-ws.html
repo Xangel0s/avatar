@@ -519,5 +519,14 @@
     </div>
 
     <script type="module" src="./streaming-client-api-ws.js"></script>
+    <script>
+      // Redirigir automáticamente si se accede a index.html en lugar de index-ws.html
+      if (window.location.pathname === '/' || window.location.pathname.endsWith('/index.html')) {
+        if (!window.location.pathname.includes('ws-streaming')) {
+          console.log('Redirigiendo a la versión con reconocimiento de voz...');
+          window.location.href = '/ws-streaming';
+        }
+      }
+    </script>
   </body>
 </html>
