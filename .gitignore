@@ -1,4 +1,8 @@
 .vscode
 node_modules
 api.json
+config.env
+custom-llm-mock/config.env
 .idea/
+*.log
+.DS_Store

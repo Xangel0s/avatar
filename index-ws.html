@@ -1,201 +1,500 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <title>D-ID Streaming POC</title>
-    <!-- added google fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;700&display=swap" rel="stylesheet" />
+<html class="dark" lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>Avatar Agent</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #000 !important;
+      margin: 0;
+      padding: 0;
+      font-family: Inter, 'Noto Sans', sans-serif;
+    }
+    
+    /* Avatar a pantalla completa */
+    #avatar-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+      z-index: 1;
+    }
+    
+    #avatar-container video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #000;
+    }
+    
+    /* Header flotante superior */
+    #top-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      pointer-events: none;
+    }
+    
+    #connection-status {
+      background: rgba(36, 37, 38, 0.9);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 0.75rem 1rem;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      pointer-events: auto;
+    }
+    
+    #connection-status p {
+      color: #e4e6eb;
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin: 0;
+    }
+    
+    #status-text {
+      color: #b0b3b8;
+      font-size: 0.75rem;
+      font-weight: 400;
+      margin-top: 0.25rem;
+    }
+    
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-left: 0.5rem;
+    }
+    
+    .status-dot.connected {
+      background: #42b883;
+    }
+    
+    .status-dot.connecting {
+      background: #fbbf24;
+    }
+    
+    .status-dot.disconnected {
+      background: #ef4444;
+    }
+    
+    #header-buttons {
+      display: flex;
+      gap: 0.5rem;
+      pointer-events: auto;
+    }
+    
+    .header-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(36, 37, 38, 0.9);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #e4e6eb;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .header-btn:hover {
+      background: rgba(58, 59, 60, 0.9);
+    }
+    
+    /* Cámara PiP abajo izquierda */
+    #user-camera-wrapper {
+      position: fixed;
+      bottom: 120px;
+      left: 1rem;
+      width: 120px;
+      height: 90px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      display: none;
+      z-index: 50;
+    }
+    
+    #user-camera-wrapper.active {
+      display: block;
+    }
+    
+    #user-camera-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    
+    /* Botones de control flotantes abajo */
+    #call-controls {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      padding: 0.75rem 1.25rem;
+      background: rgba(36, 37, 38, 0.95);
+      backdrop-filter: blur(20px);
+      border-radius: 50px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+    
+    .call-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: rgba(255, 255, 255, 0.1);
+      color: #e4e6eb;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    .call-btn:hover {
+      transform: scale(1.1);
+      background: rgba(255, 255, 255, 0.2);
+    }
+    
+    .call-btn.active {
+      background: rgba(66, 184, 131, 0.3);
+      border-color: #42b883;
+    }
+    
+    .call-btn.muted {
+      background: rgba(239, 68, 68, 0.3);
+      border-color: #ef4444;
+    }
+    
+    .call-btn.hangup {
+      width: 56px;
+      height: 56px;
+      background: #ef4444;
+      border-color: #ef4444;
+    }
+    
+    .call-btn.hangup:hover {
+      background: #dc2626;
+    }
+    
+    .call-btn .material-symbols-outlined {
+      font-size: 24px;
+    }
+    
+    .call-btn.hangup .material-symbols-outlined {
+      font-size: 28px;
+    }
+    
+    /* Separador */
+    .separator {
+      width: 1px;
+      height: 32px;
+      background: rgba(255, 255, 255, 0.2);
+      margin: 0 0.25rem;
+    }
+    
+    /* Loading overlay */
+    #loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      color: #e4e6eb;
+    }
+    
+    #loading-overlay.hidden {
+      display: none;
+    }
+    
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid rgba(255, 255, 255, 0.1);
+      border-top-color: #42b883;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 1rem;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* Bottom sheet */
+    #bottom-sheet {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #18191a;
+      border-radius: 20px 20px 0 0;
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+      transform: translateY(100%);
+      transition: transform 0.3s ease-out;
+      z-index: 999;
+      max-height: 80vh;
+      overflow-y: auto;
+      color: #e4e6eb;
+    }
+    
+    #bottom-sheet.open {
+      transform: translateY(0);
+    }
+    
+    #bottom-sheet-header {
+      padding: 1.25rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      background: #18191a;
+      z-index: 10;
+    }
+    
+    #bottom-sheet-header h3 {
+      font-size: 1.125rem;
+      font-weight: 700;
+      color: #e4e6eb;
+    }
+    
+    #close-sheet {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255, 255, 255, 0.1);
+      color: #e4e6eb;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      transition: all 0.2s;
+    }
+    
+    #close-sheet:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+    
+    #bottom-sheet-content {
+      padding: 1.25rem;
+    }
+    
+    .section-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #b0b3b8;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.75rem;
+    }
+    
+    .sheet-btn {
+      width: 100%;
+      padding: 1rem;
+      margin-bottom: 0.5rem;
+      border-radius: 12px;
+      background: #242526;
+      border: none;
+      color: #e4e6eb;
+      font-weight: 500;
+      text-align: left;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .sheet-btn:hover {
+      background: #2d2f31;
+    }
+    
+    .status-box {
+      padding: 1rem;
+      background: #242526;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      color: #e4e6eb;
+    }
+    
+    .status-box div {
+      margin-bottom: 0.5rem;
+    }
+    
+    .status-box strong {
+      color: #b0b3b8;
+    }
+    
+    /* Responsive móvil */
+    @media (max-width: 768px) {
+      #user-camera-wrapper {
+        width: 100px;
+        height: 75px;
+        bottom: 100px;
+      }
+      
+      .call-btn {
+        width: 44px;
+        height: 44px;
+      }
+      
+      .call-btn.hangup {
+        width: 52px;
+        height: 52px;
+      }
+      
+      #call-controls {
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+      }
+      
+      #connection-status {
+        padding: 0.5rem 0.75rem;
+      }
+      
+      #connection-status p {
+        font-size: 0.75rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading Overlay -->
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div>Conectando con el avatar...</div>
+  </div>
 
-    <style>
-      .peerConnectionState-new {
-        color: cornflowerblue;
-      }
-      .peerConnectionState-connecting {
-        color: orange;
-      }
-      .peerConnectionState-connected {
-        color: green;
-      }
-      .peerConnectionState-disconnected,
-      .peerConnectionState-closed,
-      .peerConnectionState-failed {
-        color: red;
-      }
+  <!-- Avatar a pantalla completa -->
+  <div id="avatar-container">
+    <video id="idle-video-element" autoplay loop muted playsinline></video>
+    <video id="stream-video-element" autoplay muted playsinline style="opacity: 0;"></video>
+  </div>
 
-      .iceConnectionState-new {
-        color: cornflowerblue;
-      }
-      .iceConnectionState-checking {
-        color: orange;
-      }
-      .iceConnectionState-connected,
-      .iceConnectionState-completed {
-        color: green;
-      }
-      .peerConnectionState-disconnected,
-      .peerConnectionState-closed,
-      .peerConnectionState-failed {
-        color: red;
-      }
+  <!-- Header superior -->
+  <div id="top-header">
+    <div id="connection-status">
+      <p>Avatar Agent <span class="status-dot connecting"></span></p>
+      <p id="status-text">Conectando...</p>
+    </div>
+    <div id="header-buttons">
+      <button id="flip-camera-button" class="header-btn" title="Voltear cámara">
+        <span class="material-symbols-outlined">flip_camera_ios</span>
+      </button>
+      <button id="settings-button" class="header-btn" title="Configuración">
+        <span class="material-symbols-outlined">settings</span>
+      </button>
+    </div>
+  </div>
 
-      .iceGatheringState-new {
-        color: cornflowerblue;
-      }
-      .iceGatheringState-gathering {
-        color: orange;
-      }
-      .iceGatheringState-complete {
-        color: black;
-      }
+  <!-- Cámara del usuario (PiP) - Abajo izquierda -->
+  <div id="user-camera-wrapper">
+    <video id="user-camera-video" autoplay muted playsinline></video>
+  </div>
 
-      .signalingState-stable {
-        color: green;
-      }
-      .signalingState-have-local-offer,
-      .signalingState-have-remote-offer,
-      .signalingState-have-local-pranswer,
-      .signalingState-have-remote-pranswer {
-        color: cornflowerblue;
-      }
-      .signalingState-closed {
-        color: red;
-      }
+  <!-- Botones de control flotantes -->
+  <div id="call-controls">
+    <button id="mic-button" class="call-btn muted" title="Micrófono">
+      <span class="material-symbols-outlined">mic_off</span>
+    </button>
+    <button id="camera-button" class="call-btn muted" title="Cámara">
+      <span class="material-symbols-outlined">videocam_off</span>
+    </button>
+    <button id="screen-share-button" class="call-btn" title="Compartir pantalla">
+      <span class="material-symbols-outlined">screen_share</span>
+    </button>
+    <div class="separator"></div>
+    <button id="hangup-button" class="call-btn hangup" title="Finalizar">
+      <span class="material-symbols-outlined">call_end</span>
+    </button>
+  </div>
 
-      .streamingState-streaming {
-        color: green;
-      }
-
-      .streamingState-empty {
-        color: grey;
-      }
-
-      .streamEvent-started {
-        color: green;
-      }
-
-      .streamEvent-done {
-        color: orange;
-      }
-
-      .streamEvent-ready {
-        color: green;
-      }
-
-      .streamEvent-error {
-        color: red;
-      }
-
-      .streamEvent-dont-care {
-        color: gray;
-      }
-
-      /* added css from here */
-
-      body * {
-        font-family: 'Mulish', sans-serif;
-        text-align: center;
-      }
-
-      #content {
-        width: 820px;
-        position: relative;
-        margin: 0 auto;
-      }
-
-      #buttons {
-        clear: both;
-        padding: 0 0 0 0;
-        text-align: center;
-      }
-
-      button {
-        padding: 10px 20px;
-        border-radius: 5px;
-        border: none;
-        font-size: 16px;
-        margin: 0 5px;
-        background-color: #7459fe;
-        color: #fff;
-      }
-
-      button:hover {
-        background-color: #9480ff;
-        cursor: pointer;
-        transition: all 0.2s ease-out;
-      }
-
-      #status {
-        clear: both;
-        padding: 20px 0 0 0;
-        text-align: left;
-        display: inline-block;
-        zoom: 1;
-        line-height: 140%;
-        font-size: 15px;
-      }
-
-      #status div {
-        padding-bottom: 10px;
-      }
-
-      #video-wrapper {
-        background: url(bg.png);
-        height: 500px;
-        background-position: top;
-      }
-
-      #video-wrapper div {
-        position: relative;
-        height: 100%;
-        width: 400px;
-        margin: 0 auto;
-      }
-
-      video {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        /*border:1px solid;*/
-        border-radius: 50%;
-        background-color: #fff;
-      }
-    </style>
-  </head>
-
-  <body>
-    <!-- adde "id=content" -->
-    <div id="content">
-      <!-- added "id=video-wrapper" -->
-      <div id="video-wrapper">
-        <div>
-          <video id="idle-video-element" width="400" height="400" autoplay loop style="opacity: 1"></video>
-          <video id="stream-video-element" width="400" height="400" autoplay style="opacity: 0"></video>
+  <!-- Bottom Sheet -->
+  <div id="bottom-sheet">
+    <div id="bottom-sheet-header">
+      <h3>Configuración</h3>
+      <button id="close-sheet">✕</button>
+    </div>
+    <div id="bottom-sheet-content">
+      <div class="mb-6">
+        <div class="section-title">Opciones de Conexión</div>
+        <button id="force-connect-button" class="sheet-btn">
+          <span>Forzar Reconexión</span>
+          <span>🔄</span>
+        </button>
+        <button id="force-conversation-button" class="sheet-btn">
+          <span>Forzar Inicio de Conversación</span>
+          <span>🎤</span>
+        </button>
+      </div>
+      <div class="mb-6">
+        <div class="section-title">Opciones de Prueba</div>
+        <button id="test-word-button" class="sheet-btn">
+          <span>Probar Stream de Palabras</span>
+          <span>💬</span>
+        </button>
+        <button id="test-audio-button" class="sheet-btn">
+          <span>Probar Stream de Audio</span>
+          <span>🔊</span>
+        </button>
+      </div>
+      <div>
+        <div class="section-title">Estado</div>
+        <div class="status-box">
+          <div><strong>ICE:</strong> <span id="status-ice">N/A</span></div>
+          <div><strong>Conexión:</strong> <span id="status-peer">N/A</span></div>
+          <div><strong>Stream:</strong> <span id="status-stream">N/A</span></div>
+          <div><strong>Evento:</strong> <span id="status-event">N/A</span></div>
         </div>
       </div>
-      <br />
-
-      <!-- added div#buttons -->
-      <div id="buttons">
-        <button id="connect-button" type="button">Connect</button>
-        <button id="stream-word-button" type="button">Stream word</button>
-        <button id="stream-audio-button" type="button">Stream audio</button>
-        <button id="destroy-button" type="button">Destroy</button>
-      </div>
-
-      <!-- added div#status -->
-      <div id="status">
-        <!-- removed the wrapping <div> tags -->
-        ICE gathering status: <label id="ice-gathering-status-label"></label><br />
-        ICE status: <label id="ice-status-label"></label><br />
-        Peer connection status: <label id="peer-status-label"></label><br />
-        Signaling status: <label id="signaling-status-label"></label><br />
-        Last stream event: <label id="stream-event-label"></label><br />
-        Streaming status: <label id="streaming-status-label"></label><br />
-      </div>
     </div>
+  </div>
 
-    <script type="module" src="./streaming-client-api-ws.js"></script>
-  </body>
+  <script type="module" src="./streaming-client-api-ws.js"></script>
+</body>
 </html>

@@ -1,4 +1,9 @@
 import * as llm from "./handlers/llm";
+import * as dotenv from "dotenv";
+import * as path from "path";
+
+// Load environment variables from config.env in the custom-llm-mock directory
+dotenv.config({ path: path.join(__dirname, '../../config.env') });
 
 const logger = console;
 
