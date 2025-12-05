@@ -1,0 +1,5 @@
+build:
+  - echo "Building application..."
+deploy:
+  - echo "Deploying application..."
+start: nginx -g "daemon off;"
