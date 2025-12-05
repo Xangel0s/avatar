@@ -556,18 +556,36 @@ function onStreamEvent(message) {
         }
         updateStatusDisplay();
         
+        // Iniciar conversación automáticamente cuando el stream esté listo
+        if (!isConversationActive) {
+          startConversation();
+        }
+        
         // Si el micrófono ya está activo pero el reconocimiento no está corriendo, iniciarlo ahora
         if (micEnabled && recognition && !isStartingRecognition && !processingResponse) {
           try {
             const currentState = recognition.state;
+            console.log('[STREAM] 🔍 Estado del reconocimiento:', currentState, 'micEnabled:', micEnabled);
             if (currentState !== 'started' && currentState !== 'starting') {
               isStartingRecognition = true;
               recognition.start();
               console.log('[STREAM] ✅ Reconocimiento de voz iniciado ahora que el stream está listo');
+            } else {
+              console.log('[STREAM] ℹ️ Reconocimiento ya está en estado:', currentState);
             }
           } catch (error) {
-            console.warn('[STREAM] ⚠️ Error al iniciar reconocimiento después de que el stream esté listo:', error);
+            console.error('[STREAM] ❌ Error al iniciar reconocimiento después de que el stream esté listo:', error);
             isStartingRecognition = false;
+          }
+        } else {
+          if (!micEnabled) {
+            console.log('[STREAM] ℹ️ Micrófono no está activo aún - el usuario debe activarlo');
+          } else if (!recognition) {
+            console.log('[STREAM] ℹ️ Reconocimiento no está inicializado aún');
+          } else if (isStartingRecognition) {
+            console.log('[STREAM] ℹ️ Reconocimiento ya se está iniciando...');
+          } else if (processingResponse) {
+            console.log('[STREAM] ℹ️ Estamos procesando una respuesta...');
           }
         }
         
@@ -1012,6 +1030,7 @@ function initSpeechRecognition() {
   };
   
   recognition.onstart = () => {
+    console.log('[RECOGNITION] ✅ Reconocimiento de voz iniciado - Escuchando...');
     updateListeningStatus('🎤 Escuchando...');
     isStartingRecognition = false;
     isInitializingRecognition = false;
