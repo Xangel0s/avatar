@@ -1,17 +1,32 @@
-# Dockerfile para producción
-FROM nginx:alpine
+# Dockerfile para producción con Node.js y Express
+FROM node:18-alpine
 
-# Copiar archivos estáticos
-COPY index.html /usr/share/nginx/html/
-COPY style.css /usr/share/nginx/html/
-COPY app.js /usr/share/nginx/html/
-COPY assets /usr/share/nginx/html/assets/
+# Instalar dependencias del sistema
+RUN apk add --no-cache bash
 
-# Copiar configuración de nginx
-COPY .nginx.conf /etc/nginx/conf.d/default.conf
+# Crear directorio de trabajo
+WORKDIR /app
 
-EXPOSE 80
+# Copiar package.json e instalar dependencias
+COPY package*.json ./
+RUN npm ci --only=production
 
-# Entrypoint: script que genera config.js y arranca nginx
-CMD ["/bin/sh", "-c", "set -e; echo \"window.OPENROUTER_API_KEY = \\\"${OPENROUTER_API_KEY:-}\\\";\" > /usr/share/nginx/html/config.js; echo \"config.js generado con API key\"; exec nginx -g 'daemon off;'"]
+# Copiar todos los archivos de la aplicación
+COPY . .
+
+# Crear directorio para archivos estáticos
+RUN mkdir -p /app/public
+
+# Mover archivos estáticos
+RUN cp -r *.html *.js *.css *.mp4 *.png *.ico assets /app/public/ 2>/dev/null || true
+
+# Exponer puerto
+EXPOSE 3000
+
+# Variables de entorno por defecto
+ENV NODE_ENV=production
+ENV PORT=3000
+
+# Iniciar servidor
+CMD ["node", "app.js"]
 

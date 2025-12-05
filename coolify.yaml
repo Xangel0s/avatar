@@ -1,5 +1,8 @@
 build:
-  - echo "Building application..."
+  - echo "Building Avatar IA application..."
+  - npm ci --only=production
 deploy:
-  - echo "Deploying application..."
-start: nginx -g "daemon off;"
+  - echo "Deploying Avatar IA application..."
+  - echo "Application ready!"
+start: node app.js
+port: 3000

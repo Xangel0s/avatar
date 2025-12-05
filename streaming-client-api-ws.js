@@ -756,11 +756,19 @@ if (!OPENROUTER_API_KEY || OPENROUTER_API_KEY === 'TU_API_KEY_AQUI') {
 let userCameraStream = null;
 let userCameraVideo = null;
 let cameraAnalysisInterval = null;
+let frameCaptureInterval = null; // Intervalo para captura rápida de frames
 let lastAnalysisTime = 0;
-const ANALYSIS_INTERVAL = 2000; // Analizar cada 2 segundos para más contexto visual
+const ANALYSIS_INTERVAL = 200; // Analizar cada 200ms (5 veces por segundo) para visión en tiempo real
+const FRAME_CAPTURE_INTERVAL = 100; // Capturar frames cada 100ms (10 fps) para detección de gestos
 let lastVisualAnalysis = null; // Almacenar último análisis visual para contexto
 let processingResponse = false; // Flag para evitar procesar múltiples veces
 let lastProcessedTranscript = ''; // Evitar procesar el mismo transcript dos veces
+
+// Variables para detección de gestos con MediaPipe Hands
+let handsDetector = null;
+let gestureHistory = []; // Historial de gestos detectados (inicializar como array vacío)
+let lastGesture = null;
+let lastFrameHash = null; // Hash del último frame para detectar cambios
 
 // Variables para captura de audio con MediaRecorder para Whisper
 let audioRecorder = null;
@@ -1138,6 +1146,154 @@ async function initFaceDetector() {
   }
 }
 
+// Cargar MediaPipe Hands dinámicamente
+async function loadMediaPipeHands() {
+  return new Promise((resolve) => {
+    // Si ya está cargado, resolver inmediatamente
+    if (typeof Hands !== 'undefined') {
+      resolve(true);
+      return;
+    }
+    
+    // Intentar cargar desde unpkg
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/@mediapipe/hands@0.4.1675469404/hands.js';
+    script.type = 'text/javascript';
+    script.async = true;
+    
+    script.onload = () => {
+      console.log('[GESTOS] MediaPipe Hands cargado correctamente');
+      resolve(true);
+    };
+    
+    script.onerror = () => {
+      console.warn('[GESTOS] No se pudo cargar MediaPipe Hands - La detección de gestos estará deshabilitada');
+      resolve(false);
+    };
+    
+    document.head.appendChild(script);
+  });
+}
+
+// Inicializar detector de gestos con MediaPipe Hands (opcional)
+async function initHandsDetector() {
+  try {
+    // Intentar cargar MediaPipe Hands dinámicamente
+    const loaded = await loadMediaPipeHands();
+    
+    // Esperar un poco más para que se inicialice
+    if (loaded) {
+      let attempts = 0;
+      while (typeof Hands === 'undefined' && attempts < 10) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        attempts++;
+      }
+    }
+    
+    if (!loaded || typeof Hands === 'undefined') {
+      console.warn('[GESTOS] MediaPipe Hands no está disponible - La detección de gestos estará deshabilitada');
+      console.warn('[GESTOS] Esto NO afecta otras funcionalidades. La cámara, reconocimiento facial y análisis visual seguirán funcionando normalmente.');
+      return false;
+    }
+    
+    handsDetector = new Hands({
+      locateFile: (file) => {
+        // Usar unpkg como CDN
+        return `https://unpkg.com/@mediapipe/hands@0.4.1675469404/${file}`;
+      }
+    });
+    
+    handsDetector.setOptions({
+      maxNumHands: 2,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+    
+    handsDetector.onResults((results) => {
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const gesture = detectGesture(results.multiHandLandmarks[0]);
+        if (gesture && gesture !== lastGesture) {
+          lastGesture = gesture;
+          gestureHistory.push({ gesture, timestamp: Date.now() });
+          // Mantener solo los últimos 10 gestos
+          if (gestureHistory.length > 10) {
+            gestureHistory.shift();
+          }
+        }
+      } else {
+        lastGesture = null;
+      }
+    });
+    
+    console.log('[GESTOS] ✅ Detector de gestos inicializado correctamente');
+    return true;
+  } catch (error) {
+    console.warn('[GESTOS] Error inicializando detector de gestos:', error);
+    console.warn('[GESTOS] La detección de gestos estará deshabilitada, pero otras funcionalidades seguirán funcionando.');
+    return false;
+  }
+}
+
+// Detectar gestos basado en posiciones de las manos
+function detectGesture(landmarks) {
+  if (!landmarks || landmarks.length < 21) return null;
+  
+  // Índices de puntos clave de la mano
+  const WRIST = 0;
+  const THUMB_TIP = 4;
+  const INDEX_TIP = 8;
+  const MIDDLE_TIP = 12;
+  const RING_TIP = 16;
+  const PINKY_TIP = 20;
+  
+  // Calcular distancias
+  const thumbUp = landmarks[THUMB_TIP].y < landmarks[WRIST].y;
+  const indexUp = landmarks[INDEX_TIP].y < landmarks[WRIST].y;
+  const middleUp = landmarks[MIDDLE_TIP].y < landmarks[WRIST].y;
+  const ringUp = landmarks[RING_TIP].y < landmarks[WRIST].y;
+  const pinkyUp = landmarks[PINKY_TIP].y < landmarks[WRIST].y;
+  
+  // Detectar gestos comunes
+  if (indexUp && !middleUp && !ringUp && !pinkyUp) {
+    return 'punto'; // Señalar
+  } else if (indexUp && middleUp && !ringUp && !pinkyUp) {
+    return 'victoria'; // V de victoria
+  } else if (indexUp && middleUp && ringUp && pinkyUp && !thumbUp) {
+    return 'saludo'; // Saludo con la mano
+  } else if (indexUp && middleUp && ringUp && pinkyUp && thumbUp) {
+    return 'mano_abierta'; // Mano abierta
+  } else if (!indexUp && !middleUp && !ringUp && !pinkyUp && thumbUp) {
+    return 'pulgar_arriba'; // Pulgar arriba
+  } else if (!indexUp && !middleUp && !ringUp && !pinkyUp && !thumbUp) {
+    return 'puño'; // Puño cerrado
+  }
+  
+  return null;
+}
+
+// Detectar gestos en un frame
+async function detectGesturesInFrame(videoElement) {
+  if (!handsDetector || !videoElement) {
+    return null;
+  }
+  
+  try {
+    // MediaPipe Hands necesita un canvas o imagen
+    const canvas = document.createElement('canvas');
+    canvas.width = videoElement.videoWidth || 640;
+    canvas.height = videoElement.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+    
+    await handsDetector.send({ image: canvas });
+    return lastGesture;
+  } catch (error) {
+    // Si falla, continuar sin gestos
+    return null;
+  }
+}
+
 // Detectar caras en el frame
 async function detectFacesInFrame(videoElement) {
   if (!faceDetector || !videoElement) {
@@ -1364,6 +1520,16 @@ async function getLLMResponse(userMessage) {
         faceInfo = ' No se detectaron personas mediante reconocimiento facial.';
       }
       
+      // Agregar información de gestos detectados
+      let gestureInfo = '';
+      if (frameData.gesture) {
+        gestureInfo = ` Gestos detectados: ${frameData.gesture}.`;
+      }
+      if (gestureHistory.length > 0) {
+        const recentGestures = gestureHistory.slice(-3).map(g => g.gesture).join(', ');
+        gestureInfo += ` Gestos recientes: ${recentGestures}.`;
+      }
+      
       // Asegurar que la imagen esté en formato correcto
       let imageUrl = frameData.image;
       if (!imageUrl.startsWith('data:image')) {
@@ -1378,16 +1544,17 @@ async function getLLMResponse(userMessage) {
         userMessageContent = [
           {
             type: 'text',
-            text: `IMPORTANTE: Tienes acceso visual completo. Analiza la imagen adjunta en detalle.${faceInfo}
+            text: `IMPORTANTE: Tienes acceso visual completo en tiempo real. Analiza la imagen adjunta en detalle.${faceInfo}${gestureInfo}
 
 El usuario dice: "${userMessage}"
 
 Analiza la imagen adjunta y responde basándote en lo que REALMENTE VES:
-- Personas: cantidad, posición, características visibles
+- Personas: cantidad, posición, características visibles, gestos y movimientos
 - Objetos: muebles, dispositivos, decoración, cualquier objeto visible
 - Ambiente: tipo de espacio, tamaño, características
 - Colores: colores dominantes y detalles
 - Iluminación: nivel de luz, fuentes visibles
+- Gestos: movimientos de manos, expresiones, acciones visibles
 - Detalles: cualquier detalle relevante visible
 
 Responde usando la información visual de la imagen. NO digas que no tienes acceso visual. Tienes una imagen adjunta que debes analizar.`
@@ -1843,6 +2010,27 @@ async function startUserCamera() {
       cameraWrapper.classList.add('active');
       cameraWrapper.classList.add('camera-active');
 
+      // Inicializar detectores
+      initFaceDetector().then(success => {
+        if (success) {
+          console.log('[CÁMARA] ✅ Detector facial inicializado');
+        }
+      });
+      
+      // Inicializar detector de gestos (opcional, no bloquea si falla)
+      initHandsDetector().then(success => {
+        if (success) {
+          console.log('[CÁMARA] ✅ Detector de gestos inicializado');
+        } else {
+          console.log('[CÁMARA] ℹ️ Detector de gestos no disponible - continuando sin gestos (esto es normal)');
+        }
+      }).catch(err => {
+        console.warn('[CÁMARA] ⚠️ Error al inicializar detector de gestos:', err);
+      });
+      
+      // Iniciar captura rápida de frames para detección de gestos (funciona incluso sin MediaPipe)
+      startFastFrameCapture();
+      
       // Iniciar análisis periódico del entorno solo si el stream está listo
       if (isStreamReady) {
         console.log('[CÁMARA] Iniciando análisis visual periódico...');
@@ -1898,6 +2086,34 @@ function stopUserCamera() {
   console.log('Cámara detenida');
 }
 
+// Captura rápida de frames para detección de gestos y visión en tiempo real
+function startFastFrameCapture() {
+  stopFastFrameCapture(); // Asegurarse de que no haya otro intervalo activo
+  
+  frameCaptureInterval = setInterval(async () => {
+    if (userCameraStream && userCameraVideo && cameraEnabled) {
+      try {
+        // Capturar frame rápidamente (sin análisis completo del LLM)
+        const frameData = await captureCameraFrame();
+        
+        // Actualizar información de gestos si se detectó alguno
+        if (frameData.gesture) {
+          // Los gestos ya se guardan automáticamente en gestureHistory
+        }
+      } catch (error) {
+        // Ignorar errores en captura rápida
+      }
+    }
+  }, FRAME_CAPTURE_INTERVAL);
+}
+
+function stopFastFrameCapture() {
+  if (frameCaptureInterval) {
+    clearInterval(frameCaptureInterval);
+    frameCaptureInterval = null;
+  }
+}
+
 // Análisis periódico del entorno visual
 function startPeriodicVisualAnalysis() {
   stopPeriodicVisualAnalysis(); // Asegurarse de que no haya otro intervalo activo
@@ -1928,6 +2144,7 @@ function stopPeriodicVisualAnalysis() {
     clearInterval(cameraAnalysisInterval);
     cameraAnalysisInterval = null;
   }
+  stopFastFrameCapture();
 }
 
 // Botones de cámara (mantener compatibilidad si existen)

@@ -3,7 +3,7 @@ const express = require('express');
 const http = require('http');
 const cors = require('cors');
 const RateLimit = require('express-rate-limit');
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 const app = express();
 
@@ -23,7 +23,12 @@ var limiter = RateLimit({
   }
 });
 
-app.use(cors({ origin: '*' })); // Permitir todos los orígenes para desarrollo
+// CORS configurado para producción - permitir todos los orígenes
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['*'];
+app.use(cors({ 
+  origin: allowedOrigins.includes('*') ? '*' : allowedOrigins,
+  credentials: true
+}));
 app.use('/', express.static(__dirname));
 
 // Aplicar rate limiter solo a rutas HTML
