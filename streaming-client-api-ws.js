@@ -510,7 +510,6 @@ function onStreamEvent(message) {
         if (recognition && (recognition.state === 'started' || recognition.state === 'starting')) {
           try {
             recognition.stop();
-            console.log('[AVATAR] 🔇 Avatar empezó a hablar - Reconocimiento detenido');
           } catch (e) {
             // Ignorar errores
           }
@@ -518,7 +517,7 @@ function onStreamEvent(message) {
         break;
       case 'stream/done':
         status = 'done';
-        // El avatar terminó de hablar - Reiniciar reconocimiento si el micrófono está activo
+        // El avatar terminó de hablar - Reiniciar reconocimiento automáticamente
         isAvatarSpeaking = false;
         setTimeout(() => {
           if (micEnabled && !processingResponse && recognition && !isStartingRecognition) {
@@ -527,13 +526,12 @@ function onStreamEvent(message) {
               if (state === 'stopped' || state === 'idle' || state === undefined || state === null) {
                 isStartingRecognition = true;
                 recognition.start();
-                console.log('[AVATAR] 🎤 Avatar terminó de hablar - Reconocimiento reiniciado');
               }
             } catch (e) {
               isStartingRecognition = false;
             }
           }
-        }, 500); // Pequeño delay para asegurar que el stream terminó completamente
+        }, 500);
         // Asegurar que el video idle se muestre cuando el stream termina
         setTimeout(() => {
           if (idleVideoElement) {
@@ -582,42 +580,29 @@ function onStreamEvent(message) {
         }
         updateStatusDisplay();
         
-        // Iniciar conversación automáticamente cuando el stream esté listo
+        // AUTO-INICIAR: Activar micrófono y conversación automáticamente cuando el stream esté listo
         if (!isConversationActive) {
+          // Auto-activar micrófono si no está activo
+          if (!micEnabled) {
+            micEnabled = true;
+            updateMicButtonState();
+          }
           startConversation();
         }
         
-        // Si el micrófono ya está activo pero el reconocimiento no está corriendo, iniciarlo ahora
+        // Iniciar reconocimiento automáticamente si el micrófono está activo
         if (micEnabled && recognition && !isStartingRecognition && !processingResponse) {
           try {
             const currentState = recognition.state;
-            console.log('[STREAM] 🔍 Estado del reconocimiento:', currentState, 'micEnabled:', micEnabled);
-            // Verificar más cuidadosamente el estado antes de iniciar
             if (currentState === 'stopped' || currentState === 'idle' || currentState === undefined || currentState === null) {
               isStartingRecognition = true;
               recognition.start();
-              console.log('[STREAM] ✅ Reconocimiento de voz iniciado ahora que el stream está listo');
-            } else {
-              console.log('[STREAM] ℹ️ Reconocimiento ya está en estado:', currentState, '- no se iniciará de nuevo');
             }
           } catch (error) {
-            // Si el error es que ya está iniciado, ignorarlo
-            if (error.name === 'InvalidStateError' && error.message.includes('already started')) {
-              console.log('[STREAM] ℹ️ Reconocimiento ya estaba iniciado - continuando normalmente');
-            } else {
-              console.error('[STREAM] ❌ Error al iniciar reconocimiento después de que el stream esté listo:', error);
+            if (error.name !== 'InvalidStateError' || !error.message.includes('already started')) {
+              console.error('[ERROR] Error al iniciar reconocimiento:', error);
             }
             isStartingRecognition = false;
-          }
-        } else {
-          if (!micEnabled) {
-            console.log('[STREAM] ℹ️ Micrófono no está activo aún - el usuario debe activarlo');
-          } else if (!recognition) {
-            console.log('[STREAM] ℹ️ Reconocimiento no está inicializado aún');
-          } else if (isStartingRecognition) {
-            console.log('[STREAM] ℹ️ Reconocimiento ya se está iniciando...');
-          } else if (processingResponse) {
-            console.log('[STREAM] ℹ️ Estamos procesando una respuesta...');
           }
         }
         
@@ -982,12 +967,9 @@ function initSpeechRecognition() {
   // El reconocimiento funcionará sin gramáticas específicas por defecto
 
   recognition.onresult = async (event) => {
-    if (processingResponse) {
-      console.log('[RECOGNITION] ⏸️ Ignorando resultado - procesando respuesta anterior');
+    if (processingResponse || isAvatarSpeaking) {
       return;
     }
-    
-    console.log('[RECOGNITION] 🎤 Audio detectado - procesando...');
     
     // Buscar el último resultado final o el más reciente con suficiente confianza
     let finalTranscript = '';
@@ -1030,10 +1012,9 @@ function initSpeechRecognition() {
       try {
         recognition.stop();
         isStartingRecognition = false;
-        processingResponse = true; // Marcar inmediatamente para evitar más detecciones
-        console.log('[RECOGNITION] ✅ Voz detectada - Deteniendo reconocimiento y procesando...');
+        processingResponse = true;
       } catch (e) {
-        // Ignorar errores al detener
+        // Ignorar errores
       }
       
       lastProcessedTranscript = finalTranscript;
@@ -1100,7 +1081,6 @@ function initSpeechRecognition() {
   };
   
   recognition.onstart = () => {
-    console.log('[RECOGNITION] ✅ Reconocimiento de voz iniciado - Escuchando...');
     updateListeningStatus('🎤 Escuchando...');
     isStartingRecognition = false;
     isInitializingRecognition = false;
@@ -1785,7 +1765,17 @@ Responde usando la información visual de la imagen. NO digas que no tienes acce
         messages: [
           {
             role: 'system',
-            content: 'Eres un asistente virtual profesional con capacidad de VISION. Cuando recibas una imagen, analízala brevemente. Responde de forma CONCISA (máximo 2-3 oraciones). NO uses emojis. Si recibes una imagen, describe lo que ves de forma breve y directa. NUNCA digas que no tienes acceso visual si recibes una imagen.'
+            content: `Eres un asistente virtual conversacional, amigable y natural. Hablas como una persona real en una conversación casual. 
+
+REGLAS IMPORTANTES:
+- Responde de forma CONCISA (máximo 2-3 oraciones, idealmente 1-2)
+- NO uses emojis
+- Mantén un tono conversacional y natural
+- Si recibes una imagen, analízala brevemente y menciona lo más relevante de forma natural
+- NUNCA digas que no tienes acceso visual si recibes una imagen
+- Responde como si estuvieras viendo y escuchando a la persona en tiempo real
+- Sé proactivo: haz preguntas relevantes cuando sea apropiado
+- Mantén el contexto de la conversación de forma natural`
           },
           ...conversationHistory
         ],
@@ -2164,7 +2154,6 @@ async function startUserCamera() {
       audio: false
     });
 
-    console.log('[CÁMARA] ✅ Permisos de cámara otorgados');
 
     userCameraVideo = document.getElementById('user-camera-video');
     const cameraWrapper = document.getElementById('user-camera-wrapper');
@@ -2208,13 +2197,11 @@ async function startUserCamera() {
       
       // Iniciar análisis periódico del entorno solo si el stream está listo
       if (isStreamReady) {
-        console.log('[CÁMARA] Iniciando análisis visual periódico...');
         startPeriodicVisualAnalysis();
       } else {
         console.log('[CÁMARA] ⚠️ Stream no está listo aún - El análisis visual se iniciará cuando el avatar esté conectado');
       }
       
-      console.log('[CÁMARA] ✅ Cámara iniciada correctamente');
     }
   } catch (error) {
     console.error('[CÁMARA] ❌ Error al acceder a la cámara:', error);
@@ -2520,7 +2507,6 @@ if (micButton) {
     
     if (!micEnabled) {
       // ACTIVAR MICRÓFONO - Solicitar permisos manualmente
-      console.log('[UI] 🔵 Usuario activando micrófono - Solicitando permisos...');
       
       // Verificar que el stream esté listo - pero permitir activar el micrófono de todas formas
       // El reconocimiento se iniciará cuando el stream esté listo
@@ -2582,7 +2568,6 @@ if (micButton) {
           
           // 3. Iniciar conversación si no está activa
           if (!isConversationActive) {
-            console.log('[UI] 🎤 Iniciando conversación...');
             isConversationActive = true;
             conversationHistory = [];
           }
@@ -2608,7 +2593,7 @@ if (micButton) {
                 console.log('[UI] ✅ Reconocimiento de voz iniciado correctamente');
               } catch (error) {
                 isStartingRecognition = false;
-                console.error('[UI] ❌ Error al iniciar reconocimiento:', error);
+                console.error('[ERROR] Error al iniciar reconocimiento:', error);
                 if (error.name === 'InvalidStateError') {
                   micEnabled = true;
                 } else {
@@ -2625,7 +2610,6 @@ if (micButton) {
           }
           
           updateMicButtonState();
-          console.log('[UI] ✅ Micrófono ACTIVADO - Puedes hablar con el avatar');
           isInitializingRecognition = false;
         }
       } catch (error) {
@@ -2646,7 +2630,6 @@ if (micButton) {
       
     } else {
       // DESACTIVAR MICRÓFONO
-      console.log('[UI] 🔴 Usuario desactivando micrófono');
       micEnabled = false;
       updateMicButtonState();
       
@@ -2660,8 +2643,6 @@ if (micButton) {
       } else if (recognition) {
         try {
           recognition.stop();
-          console.log('[UI] ✅ Reconocimiento de voz detenido - Ya no puedes hablar');
-          console.log('[UI] ℹ️ El avatar puede seguir hablando normalmente');
           updateListeningStatus('');
           // Ocultar botón de detener
           if (stopListeningButton) {
@@ -2701,7 +2682,6 @@ if (cameraButton) {
   cameraButton.onclick = async () => {
     if (!cameraEnabled) {
       // ACTIVAR CÁMARA - Solicitar permisos manualmente
-      console.log('[UI] 🔵 Usuario activando cámara - Solicitando permisos...');
       
       try {
         await startUserCamera();
@@ -2731,7 +2711,6 @@ if (cameraButton) {
       }
     } else {
       // DESACTIVAR CÁMARA
-      console.log('[UI] 🔴 Usuario desactivando cámara');
       stopUserCamera();
       stopPeriodicVisualAnalysis();
       cameraEnabled = false;
@@ -2911,7 +2890,6 @@ if (stopListeningButton) {
         updateMicButtonState();
         updateListeningStatus('');
         stopListeningButton.style.display = 'none';
-        console.log('[UI] ✅ Reconocimiento de voz detenido manualmente');
       } catch (error) {
         console.error('[UI] Error al detener reconocimiento:', error);
       }
@@ -2970,7 +2948,6 @@ if (hangupButton) {
   }
   
   if (!peerConnection || peerConnection?.connectionState !== 'connected') {
-    console.log('[INICIO] Auto-iniciando conexión con el avatar...');
     updateConnectionStatus('connecting', 'Conectando...');
     try {
       await connectToAvatar();
