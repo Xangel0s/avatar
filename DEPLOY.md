@@ -23,13 +23,21 @@
 #### Paso 3: Variables de Entorno
 Agregar las siguientes variables de entorno en Coolify:
 
-**Requeridas:**
+**⚠️ REQUERIDAS (Mínimo para funcionar):**
+- `DID_API_KEY`: Tu API key de D-ID (formato: `email:api_key`)
 - `OPENROUTER_API_KEY`: Tu API key de OpenRouter
-- `PORT`: `3000` (o el puerto que prefieras)
 
-**Opcionales:**
+**Opcionales (tienen valores por defecto):**
+- `PORT`: `3000` (o el puerto que prefieras)
+- `NODE_ENV`: `production` (ya configurado en Dockerfile)
 - `ALLOWED_ORIGINS`: Orígenes permitidos para CORS (separados por comas, o `*` para todos)
-- `NODE_ENV`: `production`
+- `DID_SERVICE`: `clips` o `talks` (default: `clips`)
+- `OPENROUTER_MODEL`: Modelo de IA para texto (default: `deepseek/deepseek-chat`)
+- `OPENROUTER_VISION_MODEL`: Modelo de IA con visión (default: `openai/gpt-4o-mini`)
+- `OPENROUTER_APP_URL`: URL de tu aplicación (default: `http://localhost:3000`)
+- `OPENROUTER_APP_NAME`: Nombre de la aplicación (default: `Avatar Realtime Agent`)
+
+**📋 Ver archivo `ENV_VARIABLES.md` para la lista completa y descripción detallada de cada variable.**
 
 #### Paso 4: Configuración de Puerto
 - **Port**: `3000` (o el puerto que configuraste en variables de entorno)
