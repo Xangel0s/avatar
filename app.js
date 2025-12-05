@@ -56,6 +56,15 @@ app.get('/ws-streaming', function (req, res) {
   res.sendFile(__dirname + '/index-ws.html');
 });
 
+// Health check endpoint para Coolify
+app.get('/health', function (req, res) {
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 const server = http.createServer(app);
 
 server.listen(port, () =>

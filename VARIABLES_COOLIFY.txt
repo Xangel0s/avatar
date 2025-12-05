@@ -26,6 +26,20 @@ OPENROUTER_APP_URL=https://avatar.edvio.app
 OPENROUTER_APP_NAME=Avatar Realtime Agent
 
 ===========================================
+⚠️ IMPORTANTE - CORRECCIONES NECESARIAS
+===========================================
+
+1. OPENROUTER_APP_URL debe incluir https://
+   ❌ INCORRECTO: avatar.edvio.app
+   ✅ CORRECTO: https://avatar.edvio.app
+
+2. OPENROUTER_API_KEY debe estar correctamente nombrada
+   ❌ INCORRECTO: PORTOPENROUTER_API_KEY
+   ✅ CORRECTO: OPENROUTER_API_KEY
+
+3. Verifica que no haya espacios extra en los nombres de variables
+
+===========================================
 📝 INSTRUCCIONES
 ===========================================
 
