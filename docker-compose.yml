@@ -6,13 +6,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: avatar-app
     restart: unless-stopped
     
     # CRÍTICO: En Coolify NO usar ports: - Traefik maneja el puerto externamente
     # Usamos expose: para que Traefik pueda enrutar internamente usando las labels
     expose:
       - "3000"
+    
+    # IMPORTANTE: No especificar container_name en Coolify - Coolify lo maneja automáticamente
+    # container_name: avatar-app  # Comentado para que Coolify lo maneje
     
     environment:
       - NODE_ENV=production
