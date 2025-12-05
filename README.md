@@ -65,10 +65,13 @@ docker run -p 80:80 -e OPENROUTER_API_KEY=tu_api_key avatar-ia
 
 1. Conecta tu repositorio de GitHub a Coolify
 2. Selecciona "Dockerfile" como Build Pack
-3. Agrega la variable de entorno:
-   - **Nombre**: `OPENROUTER_API_KEY`
-   - **Valor**: Tu API key de OpenRouter
-4. Deploy!
+3. **Configura las variables de entorno requeridas:**
+   - `DID_API_KEY`: Tu API key de D-ID (formato: `email:api_key`)
+   - `OPENROUTER_API_KEY`: Tu API key de OpenRouter
+4. **Opcional**: Configura variables adicionales (ver `.env.example` o `ENV_VARIABLES.md`)
+5. Deploy!
+
+**📖 Guía completa**: Ver `COOLIFY_SETUP.md` para instrucciones detalladas paso a paso.
 
 ## Variables de Entorno
 
