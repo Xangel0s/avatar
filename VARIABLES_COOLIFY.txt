@@ -1,0 +1,39 @@
+===========================================
+VARIABLES DE ENTORNO PARA COOLIFY
+===========================================
+
+Copia y pega estas variables en Coolify → Environment Variables
+
+===========================================
+🔴 REQUERIDAS (Mínimo para funcionar)
+===========================================
+
+DID_API_KEY=tu_email@ejemplo.com:tu_api_key_de_did
+OPENROUTER_API_KEY=sk-or-v1-tu_api_key_de_openrouter
+
+===========================================
+🟡 OPCIONALES (Tienen valores por defecto)
+===========================================
+
+PORT=3000
+NODE_ENV=production
+ALLOWED_ORIGINS=*
+DID_SERVICE=clips
+OPENROUTER_MODEL=deepseek/deepseek-chat
+OPENROUTER_VISION_MODEL=openai/gpt-4o-mini
+OPENROUTER_AUDIO_MODEL=openai/whisper
+OPENROUTER_APP_URL=https://tu-dominio.com
+OPENROUTER_APP_NAME=Avatar Realtime Agent
+
+===========================================
+📝 INSTRUCCIONES
+===========================================
+
+1. Ve a tu aplicación en Coolify
+2. Haz clic en "Environment Variables"
+3. Copia cada variable de arriba
+4. Reemplaza los valores de ejemplo con tus API keys reales
+5. Guarda y despliega
+
+Para más detalles, ver: COOLIFY_SETUP.md
+
