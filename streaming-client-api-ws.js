@@ -1821,15 +1821,20 @@ Responde usando la información visual de la imagen. NO digas que no tienes acce
         ];
       }
       
-      // Obtener análisis visual detallado ANTES de enviar al LLM para tener más contexto
-      const visualAnalysis = await analyzeVisualEnvironment();
-      if (visualAnalysis) {
-        lastVisualAnalysis = visualAnalysis; // Guardar último análisis
-        updateVisualAnalysis(visualAnalysis);
-        // Incluir análisis visual en el contexto del mensaje
-        const analysisText = `\n\n[Análisis visual detallado del entorno: ${visualAnalysis}]`;
-        if (Array.isArray(userMessageContent)) {
-          userMessageContent[0].text += analysisText;
+      // Solo obtener análisis visual si el usuario pregunta específicamente por el entorno
+      const userMessageLower = userMessage.toLowerCase();
+      const visualKeywords = ['qué ves', 'qué hay', 'dónde estoy', 'describe', 'qué hay alrededor', 'qué hay detrás', 'fondo', 'entorno', 'ambiente', 'lugar'];
+      const needsVisualAnalysis = visualKeywords.some(keyword => userMessageLower.includes(keyword));
+      
+      if (needsVisualAnalysis) {
+        const visualAnalysis = await analyzeVisualEnvironment();
+        if (visualAnalysis) {
+          lastVisualAnalysis = visualAnalysis;
+          updateVisualAnalysis(visualAnalysis);
+          const analysisText = `\n\n[Análisis visual del entorno: ${visualAnalysis}]`;
+          if (Array.isArray(userMessageContent)) {
+            userMessageContent[0].text += analysisText;
+          }
         }
       }
     } else if (lastVisualAnalysis) {
