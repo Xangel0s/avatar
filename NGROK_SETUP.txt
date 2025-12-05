@@ -1,0 +1,53 @@
+===========================================
+CONFIGURACIÓN DE NGROK
+===========================================
+
+Tu token de ngrok: 36QcMfK98FwwoLTRUTB8Zpf1NVM_28Sfq9qnGnBTL1f7xh65A
+
+===========================================
+VARIABLES DE ENTORNO PARA COOLIFY
+===================================
+
+Copia y pega estas variables en Coolify → Environment Variables:
+
+NGROK_AUTHTOKEN=36QcMfK98FwwoLTRUTB8Zpf1NVM_28Sfq9qnGnBTL1f7xh65A
+
+===========================================
+VARIABLES REQUERIDAS COMPLETAS
+===================================
+
+DID_API_KEY=tu_email@ejemplo.com:tu_api_key_de_did
+OPENROUTER_API_KEY=sk-or-v1-tu_api_key_de_openrouter
+NGROK_AUTHTOKEN=36QcMfK98FwwoLTRUTB8Zpf1NVM_28Sfq9qnGnBTL1f7xh65A
+
+===========================================
+CÓMO FUNCIONA
+===================================
+
+1. Agrega NGROK_AUTHTOKEN en Coolify
+2. Haz redeploy de la aplicación
+3. Ngrok se iniciará automáticamente
+4. Verás la URL HTTPS en los logs:
+   ✅ Ngrok URL: https://xxxx-xxxx-xxxx.ngrok-free.app
+5. Comparte ese link con quien quieras
+
+===========================================
+VERIFICACIÓN
+===================================
+
+Después del deploy, verifica los logs:
+
+docker logs $(docker ps | grep avatar | awk '{print $1}') | grep "Ngrok URL"
+
+O en Coolify, ve a Logs y busca:
+✅ Ngrok URL: https://...
+
+===========================================
+NOTAS
+===================================
+
+- La URL cambia cada vez que reinicias (plan gratuito)
+- Para URLs estables, considera el plan de pago de ngrok
+- El link funciona inmediatamente después de iniciar
+- Dashboard de ngrok: http://localhost:4040 (si accedes al servidor)
+
