@@ -53,14 +53,15 @@ services:
       # Puerto del servicio
       - "traefik.http.services.avatar.loadbalancer.server.port=3000"
       
-      # Health check para Traefik
-      - "traefik.http.services.avatar.loadbalancer.healthcheck.path=/health"
-      - "traefik.http.services.avatar.loadbalancer.healthcheck.interval=30s"
+      # IMPORTANTE: No usar healthcheck en labels de Traefik si el servicio no está listo
+      # Traefik esperará a que el health check pase antes de enrutar tráfico
+      # - "traefik.http.services.avatar.loadbalancer.healthcheck.path=/health"
+      # - "traefik.http.services.avatar.loadbalancer.healthcheck.interval=30s"
     
     healthcheck:
-      test: ["CMD", "wget", "--spider", "--quiet", "--tries=1", "http://0.0.0.0:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
+      test: ["CMD", "wget", "--spider", "--quiet", "--tries=1", "http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
