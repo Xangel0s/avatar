@@ -43,9 +43,10 @@ app.use((req, res, next) => {
   }
   next();
 });
+// Servir archivos estáticos ANTES del rate limiter
 app.use('/', express.static(__dirname));
 
-// Aplicar rate limiter solo a rutas HTML
+// Aplicar rate limiter solo a rutas HTML (después de static)
 app.use('/', limiter);
 
 app.get('/', function (req, res) {

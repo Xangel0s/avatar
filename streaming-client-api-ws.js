@@ -445,20 +445,46 @@ function onTrack(event) {
    */
 
   if (!event.track) return;
+  if (!peerConnection) return;
+
+  // Limpiar intervalo anterior si existe
+  if (statsIntervalId) {
+    clearInterval(statsIntervalId);
+  }
 
   statsIntervalId = setInterval(async () => {
-    const stats = await peerConnection.getStats(event.track);
-    stats.forEach((report) => {
-      if (report.type === 'inbound-rtp' && report.kind === 'video') {
-        const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
-
-        if (videoStatusChanged) {
-          videoIsPlaying = report.bytesReceived > lastBytesReceived;
-          onVideoStatusChange(videoIsPlaying, event.streams[0]);
+    try {
+      // Verificar que peerConnection existe y está conectado
+      if (!peerConnection || peerConnection.connectionState === 'closed' || peerConnection.connectionState === 'failed') {
+        if (statsIntervalId) {
+          clearInterval(statsIntervalId);
+          statsIntervalId = null;
         }
-        lastBytesReceived = report.bytesReceived;
+        return;
       }
-    });
+
+      // Usar getStats() sin parámetros para obtener todas las estadísticas
+      const stats = await peerConnection.getStats();
+      stats.forEach((report) => {
+        if (report.type === 'inbound-rtp' && report.kind === 'video') {
+          const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
+
+          if (videoStatusChanged) {
+            videoIsPlaying = report.bytesReceived > lastBytesReceived;
+            if (event.streams && event.streams[0]) {
+              onVideoStatusChange(videoIsPlaying, event.streams[0]);
+            }
+          }
+          lastBytesReceived = report.bytesReceived;
+        }
+      });
+    } catch (error) {
+      // Silenciar errores de getStats - no es crítico para la funcionalidad
+      if (statsIntervalId) {
+        clearInterval(statsIntervalId);
+        statsIntervalId = null;
+      }
+    }
   }, 500);
 }
 
@@ -559,11 +585,26 @@ async function createPeerConnection(offer, iceServers) {
     pcDataChannel.addEventListener('message', onStreamEvent, true);
   }
 
+  // Verificar estado antes de setRemoteDescription
+  if (peerConnection.signalingState !== 'stable' && peerConnection.signalingState !== 'have-local-offer') {
+    console.warn('[PEER] Estado de señalización inesperado:', peerConnection.signalingState);
+  }
+  
   await peerConnection.setRemoteDescription(offer);
   console.log('set remote sdp OK');
 
+  // Verificar estado antes de createAnswer
+  if (peerConnection.signalingState !== 'have-remote-offer') {
+    console.warn('[PEER] Estado de señalización inesperado antes de createAnswer:', peerConnection.signalingState);
+  }
+
   const sessionClientAnswer = await peerConnection.createAnswer();
   console.log('create local sdp OK');
+
+  // Verificar estado antes de setLocalDescription
+  if (peerConnection.signalingState !== 'have-remote-offer') {
+    console.warn('[PEER] Estado de señalización inesperado antes de setLocalDescription:', peerConnection.signalingState);
+  }
 
   await peerConnection.setLocalDescription(sessionClientAnswer);
   console.log('set local sdp OK');
