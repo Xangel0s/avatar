@@ -58,9 +58,9 @@ services:
       - "traefik.http.services.avatar.loadbalancer.healthcheck.interval=30s"
     
     healthcheck:
-      test: ["CMD", "wget", "--spider", "--quiet", "--tries=1", "http://localhost:3000/health"]
+      test: ["CMD", "wget", "--spider", "--quiet", "--tries=1", "http://0.0.0.0:3000/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 15s
+      retries: 5
+      start_period: 30s
 
