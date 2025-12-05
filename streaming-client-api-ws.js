@@ -1939,15 +1939,15 @@ REGLAS CRÍTICAS:
       .replace(/[\u{1FA00}-\u{1FA6F}]/gu, '') // Emojis extendidos
       .trim();
     
-    // Limitar longitud de respuesta (máximo 200 palabras o ~1000 caracteres)
-    if (aiResponse.length > 1000) {
-      // Truncar a 200 palabras
+    // Limitar longitud de respuesta (máximo 30 palabras o ~300 caracteres)
+    if (aiResponse.length > 300) {
+      // Truncar a 30 palabras
       const words = aiResponse.split(/\s+/);
-      if (words.length > 200) {
-        aiResponse = words.slice(0, 200).join(' ') + '...';
+      if (words.length > 30) {
+        aiResponse = words.slice(0, 30).join(' ') + '...';
       } else {
-        // Si tiene menos de 200 palabras pero más de 1000 caracteres, truncar por caracteres
-        aiResponse = aiResponse.substring(0, 1000) + '...';
+        // Si tiene menos de 30 palabras pero más de 300 caracteres, truncar por caracteres
+        aiResponse = aiResponse.substring(0, 297) + '...';
       }
     }
     
@@ -2006,24 +2006,15 @@ REGLAS CRÍTICAS:
     conversationHistory.push({ role: 'assistant', content: aiResponse });
     
     // Enviar respuesta al avatar (ya sin emojis)
+    // El reconocimiento se reiniciará automáticamente cuando el avatar termine (stream/done)
     await sendTextToAvatar(aiResponse);
     
     // Marcar que terminamos de procesar
     processingResponse = false;
     
-    updateListeningStatus('🎤 Escuchando...');
+    updateListeningStatus('🎤 Esperando respuesta del avatar...');
     
-    // Reiniciar reconocimiento después de un delay más largo para que el avatar termine de hablar
-    setTimeout(() => {
-      if (micEnabled && isConversationActive && recognition && !isStartingRecognition && !processingResponse) {
-        try {
-          isStartingRecognition = true;
-          recognition.start();
-        } catch (e) {
-          isStartingRecognition = false;
-        }
-      }
-    }, 2000); // Delay más largo (2 segundos) para evitar interrupciones mientras el avatar habla
+    // NO reiniciar reconocimiento aquí - esperar a que el avatar termine (stream/done)
   } catch (error) {
     updateListeningStatus('❌ Error: ' + error.message.substring(0, 50));
     
