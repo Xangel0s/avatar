@@ -1937,6 +1937,10 @@ REGLAS IMPORTANTES:
           'Content-Type': 'application/json',
           'HTTP-Referer': OPENROUTER_APP_URL,
           'X-Title': OPENROUTER_APP_NAME,
+          'X-Project-Type': 'academic',
+          'X-Project-Description': 'Proyecto académico de investigación en IA conversacional',
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache',
         },
         body: JSON.stringify({
           model: OPENROUTER_MODEL,
