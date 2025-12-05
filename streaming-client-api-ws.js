@@ -556,6 +556,21 @@ function onStreamEvent(message) {
         }
         updateStatusDisplay();
         
+        // Si el micrófono ya está activo pero el reconocimiento no está corriendo, iniciarlo ahora
+        if (micEnabled && recognition && !isStartingRecognition && !processingResponse) {
+          try {
+            const currentState = recognition.state;
+            if (currentState !== 'started' && currentState !== 'starting') {
+              isStartingRecognition = true;
+              recognition.start();
+              console.log('[STREAM] ✅ Reconocimiento de voz iniciado ahora que el stream está listo');
+            }
+          } catch (error) {
+            console.warn('[STREAM] ⚠️ Error al iniciar reconocimiento después de que el stream esté listo:', error);
+            isStartingRecognition = false;
+          }
+        }
+        
         // Iniciar análisis visual solo si la cámara ya está activa
         if (cameraEnabled && userCameraStream) {
           startPeriodicVisualAnalysis();
