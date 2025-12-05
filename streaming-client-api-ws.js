@@ -873,12 +873,8 @@ function initSpeechRecognition() {
   recognition.maxAlternatives = 1;
   
   // Configuraciones adicionales para mejorar la detección
-  recognition.serviceURI = ''; // Usar el servicio por defecto del navegador
-  
-  // Ajustar sensibilidad - algunos navegadores soportan esto
-  if (recognition.grammars) {
-    recognition.grammars = null; // No usar gramáticas específicas, detectar cualquier habla
-  }
+  // NO establecer grammars a null - algunos navegadores no lo permiten
+  // El reconocimiento funcionará sin gramáticas específicas por defecto
 
   recognition.onresult = async (event) => {
     if (processingResponse) return;
@@ -2419,12 +2415,11 @@ if (micButton) {
       // ACTIVAR MICRÓFONO - Solicitar permisos manualmente
       console.log('[UI] 🔵 Usuario activando micrófono - Solicitando permisos...');
       
-      // Verificar que el stream esté listo
+      // Verificar que el stream esté listo - pero permitir activar el micrófono de todas formas
+      // El reconocimiento se iniciará cuando el stream esté listo
       if (!isStreamReady) {
-        console.warn('[UI] ⚠️ Stream no está listo aún. Espera a que el avatar se conecte.');
-        micEnabled = false;
-        updateMicButtonState();
-        return;
+        console.warn('[UI] ⚠️ Stream no está listo aún, pero puedes activar el micrófono. El reconocimiento comenzará cuando el stream esté listo.');
+        // Continuar con la activación del micrófono - no retornar
       }
       
       // Marcar que estamos inicializando
