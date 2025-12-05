@@ -505,9 +505,35 @@ function onStreamEvent(message) {
     switch (event) {
       case 'stream/started':
         status = 'started';
+        // El avatar empezó a hablar - DETENER reconocimiento inmediatamente
+        isAvatarSpeaking = true;
+        if (recognition && (recognition.state === 'started' || recognition.state === 'starting')) {
+          try {
+            recognition.stop();
+            console.log('[AVATAR] 🔇 Avatar empezó a hablar - Reconocimiento detenido');
+          } catch (e) {
+            // Ignorar errores
+          }
+        }
         break;
       case 'stream/done':
         status = 'done';
+        // El avatar terminó de hablar - Reiniciar reconocimiento si el micrófono está activo
+        isAvatarSpeaking = false;
+        setTimeout(() => {
+          if (micEnabled && !processingResponse && recognition && !isStartingRecognition) {
+            try {
+              const state = recognition.state;
+              if (state === 'stopped' || state === 'idle' || state === undefined || state === null) {
+                isStartingRecognition = true;
+                recognition.start();
+                console.log('[AVATAR] 🎤 Avatar terminó de hablar - Reconocimiento reiniciado');
+              }
+            } catch (e) {
+              isStartingRecognition = false;
+            }
+          }
+        }, 500); // Pequeño delay para asegurar que el stream terminó completamente
         // Asegurar que el video idle se muestre cuando el stream termina
         setTimeout(() => {
           if (idleVideoElement) {
@@ -566,15 +592,21 @@ function onStreamEvent(message) {
           try {
             const currentState = recognition.state;
             console.log('[STREAM] 🔍 Estado del reconocimiento:', currentState, 'micEnabled:', micEnabled);
-            if (currentState !== 'started' && currentState !== 'starting') {
+            // Verificar más cuidadosamente el estado antes de iniciar
+            if (currentState === 'stopped' || currentState === 'idle' || currentState === undefined || currentState === null) {
               isStartingRecognition = true;
               recognition.start();
               console.log('[STREAM] ✅ Reconocimiento de voz iniciado ahora que el stream está listo');
             } else {
-              console.log('[STREAM] ℹ️ Reconocimiento ya está en estado:', currentState);
+              console.log('[STREAM] ℹ️ Reconocimiento ya está en estado:', currentState, '- no se iniciará de nuevo');
             }
           } catch (error) {
-            console.error('[STREAM] ❌ Error al iniciar reconocimiento después de que el stream esté listo:', error);
+            // Si el error es que ya está iniciado, ignorarlo
+            if (error.name === 'InvalidStateError' && error.message.includes('already started')) {
+              console.log('[STREAM] ℹ️ Reconocimiento ya estaba iniciado - continuando normalmente');
+            } else {
+              console.error('[STREAM] ❌ Error al iniciar reconocimiento después de que el stream esté listo:', error);
+            }
             isStartingRecognition = false;
           }
         } else {
@@ -839,11 +871,51 @@ let userCameraVideo = null;
 let cameraAnalysisInterval = null;
 let frameCaptureInterval = null; // Intervalo para captura rápida de frames
 let lastAnalysisTime = 0;
-const ANALYSIS_INTERVAL = 200; // Analizar cada 200ms (5 veces por segundo) para visión en tiempo real
+const ANALYSIS_INTERVAL = 10000; // Analizar cada 10 segundos (reducido para evitar demasiadas peticiones)
 const FRAME_CAPTURE_INTERVAL = 100; // Capturar frames cada 100ms (10 fps) para detección de gestos
 let lastVisualAnalysis = null; // Almacenar último análisis visual para contexto
 let processingResponse = false; // Flag para evitar procesar múltiples veces
 let lastProcessedTranscript = ''; // Evitar procesar el mismo transcript dos veces
+let isAvatarSpeaking = false; // Flag para saber si el avatar está hablando
+
+// Sistema de cola para peticiones a OpenRouter (una a la vez)
+let openRouterQueue = [];
+let isProcessingOpenRouterRequest = false;
+
+// Procesar cola de peticiones a OpenRouter
+async function processOpenRouterQueue() {
+  if (isProcessingOpenRouterRequest || openRouterQueue.length === 0) {
+    return;
+  }
+  
+  isProcessingOpenRouterRequest = true;
+  const request = openRouterQueue.shift();
+  
+  try {
+    const result = await request.fn();
+    if (request.resolve) {
+      request.resolve(result);
+    }
+  } catch (error) {
+    if (request.reject) {
+      request.reject(error);
+    }
+  } finally {
+    isProcessingOpenRouterRequest = false;
+    // Procesar siguiente petición en la cola
+    if (openRouterQueue.length > 0) {
+      setTimeout(() => processOpenRouterQueue(), 100);
+    }
+  }
+}
+
+// Agregar petición a la cola
+function queueOpenRouterRequest(fn) {
+  return new Promise((resolve, reject) => {
+    openRouterQueue.push({ fn, resolve, reject });
+    processOpenRouterQueue();
+  });
+}
 
 // Variables para detección de gestos con MediaPipe Hands
 let handsDetector = null;
@@ -953,38 +1025,31 @@ function initSpeechRecognition() {
     }
     
     // Si encontramos voz clara, DETENER INMEDIATAMENTE y procesar
-    if (hasFinalResult && finalTranscript && finalTranscript !== lastProcessedTranscript) {
+    if (hasFinalResult && finalTranscript && finalTranscript !== lastProcessedTranscript && !processingResponse && !isAvatarSpeaking) {
       // Detener el reconocimiento INMEDIATAMENTE cuando se detecta cualquier voz
       try {
         recognition.stop();
         isStartingRecognition = false;
         processingResponse = true; // Marcar inmediatamente para evitar más detecciones
+        console.log('[RECOGNITION] ✅ Voz detectada - Deteniendo reconocimiento y procesando...');
       } catch (e) {
         // Ignorar errores al detener
       }
       
-      processingResponse = true;
       lastProcessedTranscript = finalTranscript;
       
       updateUserMessage(finalTranscript);
       
-      // Procesar respuesta inmediatamente
-      await getLLMResponse(finalTranscript);
-      
-      processingResponse = false;
-      lastProcessedTranscript = ''; // Reset para permitir nuevas detecciones
-      
-      // Reiniciar reconocimiento después de que el avatar termine de responder
-      setTimeout(() => {
-        if (micEnabled && isConversationActive && recognition && !isStartingRecognition && !processingResponse) {
-          try {
-            isStartingRecognition = true;
-            recognition.start();
-          } catch (e) {
-            isStartingRecognition = false;
-          }
-        }
-      }, 1500); // Delay más largo para evitar interrupciones mientras el avatar habla
+      // Procesar respuesta inmediatamente (NO reiniciar reconocimiento aquí - se hará cuando el avatar termine)
+      try {
+        await getLLMResponse(finalTranscript);
+      } catch (error) {
+        console.error('[RECOGNITION] ❌ Error procesando respuesta:', error);
+      } finally {
+        // NO reiniciar aquí - esperar a que el avatar termine de hablar (stream/done)
+        processingResponse = false;
+        lastProcessedTranscript = ''; // Reset para permitir nuevas detecciones
+      }
     }
   };
 
@@ -1504,7 +1569,8 @@ async function analyzeVisualEnvironment() {
     faceInfo = ' No se detectaron personas en la imagen.';
   }
 
-  try {
+  // Usar cola para procesar una petición a la vez
+  return queueOpenRouterRequest(async () => {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -1512,6 +1578,8 @@ async function analyzeVisualEnvironment() {
         'Content-Type': 'application/json',
         'HTTP-Referer': OPENROUTER_APP_URL,
         'X-Title': OPENROUTER_APP_NAME,
+        'User-Agent': 'Avatar-Realtime-Agent/2.0',
+        'Origin': window.location.origin,
       },
       body: JSON.stringify({
         model: OPENROUTER_VISION_MODEL,
@@ -1722,7 +1790,7 @@ Responde usando la información visual de la imagen. NO digas que no tienes acce
           ...conversationHistory
         ],
         stream: false,
-        max_tokens: 150, // Limitar longitud de respuesta
+        max_tokens: 80, // Respuestas más cortas (reducido de 150)
         temperature: 0.7, // Respuestas más consistentes
       }),
     });
