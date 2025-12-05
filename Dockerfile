@@ -81,38 +81,48 @@ set -e
 # Generar configuración
 /app/generate-config.sh
 
-# Iniciar servidor en background
-node app.js &
-SERVER_PID=$!
-
-# Esperar a que el servidor esté listo
-sleep 3
-
 # Iniciar ngrok si NGROK_AUTHTOKEN está configurado
 if [ ! -z "$NGROK_AUTHTOKEN" ]; then
-  echo "🚀 Iniciando ngrok..."
-  ngrok config add-authtoken "$NGROK_AUTHTOKEN"
-  ngrok http 3000 --log=stdout &
+  echo "🚀 Configurando ngrok..."
+  ngrok config add-authtoken "$NGROK_AUTHTOKEN" 2>/dev/null || true
+  
+  echo "🚀 Iniciando ngrok en background..."
+  ngrok http 3000 --log=stdout > /tmp/ngrok.log 2>&1 &
   NGROK_PID=$!
   
   # Esperar a que ngrok esté listo
-  sleep 5
+  echo "⏳ Esperando a que ngrok esté listo..."
+  sleep 8
   
   # Obtener URL de ngrok
-  NGROK_URL=$(curl -s http://localhost:4040/api/tunnels | grep -o '"public_url":"https://[^"]*' | head -1 | cut -d'"' -f4)
+  NGROK_URL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | grep -o '"public_url":"https://[^"]*' | head -1 | cut -d'"' -f4 || echo "")
   if [ ! -z "$NGROK_URL" ]; then
+    echo ""
+    echo "✅ ========================================="
     echo "✅ Ngrok URL: $NGROK_URL"
+    echo "✅ ========================================="
     echo "🌐 Accede a tu aplicación en: $NGROK_URL"
-    echo "🌐 WebSocket streaming en: $NGROK_URL/ws-streaming"
+    echo "🎥 WebSocket streaming en: $NGROK_URL/ws-streaming"
+    echo "📊 Ngrok dashboard: http://localhost:4040"
+    echo "✅ ========================================="
+    echo ""
+    
+    # Actualizar openrouter.json con la URL de ngrok
+    if [ -f /app/openrouter.json ]; then
+      sed -i "s|\"appUrl\":\".*\"|\"appUrl\":\"$NGROK_URL\"|g" /app/openrouter.json
+      echo "✅ openrouter.json actualizado con URL de ngrok"
+    fi
+  else
+    echo "⚠️  No se pudo obtener la URL de ngrok. Revisa los logs: /tmp/ngrok.log"
   fi
-  
-  # Esperar a que los procesos terminen
-  wait $SERVER_PID $NGROK_PID
 else
   echo "⚠️  NGROK_AUTHTOKEN no está configurado. Ngrok no se iniciará."
   echo "💡 Para usar ngrok, configura la variable de entorno NGROK_AUTHTOKEN"
-  wait $SERVER_PID
 fi
+
+# Iniciar servidor (en foreground para que el contenedor no termine)
+echo "🚀 Iniciando servidor Node.js..."
+exec node app.js
 START_EOF
 RUN chmod +x /app/start.sh
 
